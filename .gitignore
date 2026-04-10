@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Generated gameplay data (accumulates per session)
+data/game_stats.csv
+
+# Proposal document (not needed for running the game)
+proposal.pdf
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
