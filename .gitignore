@@ -5,8 +5,9 @@ __pycache__/
 # Generated gameplay data (accumulates per session)
 data/game_stats.csv
 
-# Proposal document (not needed for running the game)
+# Project internal docs
 proposal.pdf
+CLAUDE.md
 
 # OS files
 .DS_Store
