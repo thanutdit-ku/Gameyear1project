@@ -7,7 +7,7 @@ class BossEnemy(Enemy):
         super().__init__(waypoints)
         self.hp = 750
         self.max_hp = 750
-        self.speed = 1.125
+        self.speed = 30
         self.reward_gold = 250
         self.radius = 32  # 2x normal enemy size
 

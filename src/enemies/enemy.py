@@ -7,12 +7,25 @@ class Enemy:
         self.waypoints = waypoints
         self.path_index = 0
         self.position = pygame.Vector2(waypoints[0])
+        self.spawn_spacing = 48
 
         # Subclasses define these directly
         self.hp = 0
         self.max_hp = 0
         self.speed = 0
         self.reward_gold = 0
+
+    def set_spawn_offset(self, distance):
+        if len(self.waypoints) < 2 or distance <= 0:
+            return
+
+        start = pygame.Vector2(self.waypoints[0])
+        next_point = pygame.Vector2(self.waypoints[1])
+        direction = next_point - start
+        if direction.length_squared() == 0:
+            return
+
+        self.position = start - direction.normalize() * distance
 
     def move(self, dt):
         if self.path_index >= len(self.waypoints) - 1:

@@ -7,7 +7,7 @@ class DarkKnight(Enemy):
         super().__init__(waypoints)
         self.hp = 300
         self.max_hp = 300
-        self.speed = 1.5
+        self.speed = 42
         self.reward_gold = 50
 
     def draw(self, screen):

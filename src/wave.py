@@ -28,15 +28,17 @@ class Wave:
         spd_mult = 1.10 ** (self.wave_number - 1)
 
         queue = []
-        for _ in range(quantity):
+        for index in range(quantity):
             enemy = self._pick_enemy_type()
             self._apply_scaling(enemy, hp_mult, spd_mult)
+            enemy.set_spawn_offset(index * enemy.spawn_spacing)
             queue.append(enemy)
 
         # Every 5th wave: insert a boss at the end of the queue
         if self.wave_number % 5 == 0:
             boss = BossEnemy(self.waypoints)
             self._apply_scaling(boss, hp_mult, spd_mult)
+            boss.set_spawn_offset(len(queue) * boss.spawn_spacing)
             queue.append(boss)
 
         return queue

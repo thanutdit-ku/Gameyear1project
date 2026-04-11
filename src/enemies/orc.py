@@ -7,7 +7,7 @@ class Orc(Enemy):
         super().__init__(waypoints)
         self.hp = 150
         self.max_hp = 150
-        self.speed = 2.25
+        self.speed = 60
         self.reward_gold = 25
 
     def draw(self, screen):
