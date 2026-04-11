@@ -1,5 +1,6 @@
 import random
 from src.enemies.goblin import Goblin
+from src.enemies.swordshield import SwordShield
 from src.enemies.orc import Orc
 from src.enemies.dark_knight import DarkKnight
 from src.enemies.boss_enemy import BossEnemy
@@ -29,7 +30,7 @@ class Wave:
 
         queue = []
         for index in range(quantity):
-            enemy = self._pick_enemy_type()
+            enemy = self._pick_enemy_type(index)
             self._apply_scaling(enemy, hp_mult, spd_mult)
             enemy.set_spawn_offset(index * enemy.spawn_spacing)
             queue.append(enemy)
@@ -43,20 +44,24 @@ class Wave:
 
         return queue
 
-    def _pick_enemy_type(self):
+    def _pick_enemy_type(self, index=0):
         """Return a new enemy instance based on wave progression."""
+        if self.wave_number == 1:
+            # First wave: alternate the two goblin variants for variety.
+            choices = [Goblin, SwordShield]
+            return choices[index % 2](self.waypoints)
         if self.wave_number <= 3:
-            # Early waves: goblins only
-            choices = [Goblin]
-            weights = [1]
+            # Early waves: goblins and shield goblins
+            choices = [Goblin, SwordShield]
+            weights = [3, 2]
         elif self.wave_number <= 6:
-            # Mid waves: goblins and orcs
-            choices = [Goblin, Orc]
-            weights = [2, 1]
-        else:
-            # Late waves: all three types
-            choices = [Goblin, Orc, DarkKnight]
+            # Mid waves: goblins, shield goblins, and orcs
+            choices = [Goblin, SwordShield, Orc]
             weights = [3, 2, 1]
+        else:
+            # Late waves: full enemy roster
+            choices = [Goblin, SwordShield, Orc, DarkKnight]
+            weights = [3, 2, 2, 1]
 
         enemy_class = random.choices(choices, weights=weights)[0]
         return enemy_class(self.waypoints)
