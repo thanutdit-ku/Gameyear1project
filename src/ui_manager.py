@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 # Layout constants (must match game area in game.py)
 SCREEN_W, SCREEN_H = 800, 600
-HUD_HEIGHT = 50
+HUD_HEIGHT = 62
 PANEL_WIDTH = 200
 GAME_W = SCREEN_W - PANEL_WIDTH   # 600
 GAME_H = SCREEN_H - HUD_HEIGHT    # 550
@@ -18,13 +18,59 @@ TOWER_BUTTONS = {
     "cannon": ("Cannon",  125, (180, 50, 0)),
 }
 
+HUD_BG_TOP = (18, 24, 38)
+HUD_BG_BOTTOM = (12, 18, 30)
+PANEL_BG = (15, 20, 33)
+PANEL_EDGE = (62, 77, 103)
+TEXT_PRIMARY = (241, 236, 225)
+TEXT_MUTED = (126, 138, 162)
+ACCENT_GOLD = (229, 183, 57)
+FIELD_GOLD = (175, 139, 74)
+FIELD_GOLD_LIGHT = (232, 202, 129)
+
+
+def _draw_vertical_gradient(surface, rect, top_color, bottom_color):
+    height = max(rect.height, 1)
+    for offset in range(height):
+        t = offset / height
+        color = tuple(
+            int(top_color[i] + (bottom_color[i] - top_color[i]) * t)
+            for i in range(3)
+        )
+        pygame.draw.line(
+            surface,
+            color,
+            (rect.left, rect.top + offset),
+            (rect.right, rect.top + offset),
+        )
+
+
+def _draw_card(surface, rect, top_color, bottom_color, border_color):
+    _draw_vertical_gradient(surface, rect, top_color, bottom_color)
+    pygame.draw.rect(surface, border_color, rect, 2, border_radius=16)
+    inner_glow = rect.inflate(-10, -10)
+    pygame.draw.rect(surface, (120, 132, 156), inner_glow, 1, border_radius=12)
+
+
+def _draw_stat_badge(surface, rect, label, value, accent, font_small, font_main):
+    pygame.draw.rect(surface, (36, 45, 67), rect, border_radius=16)
+    pygame.draw.rect(surface, (77, 92, 119), rect, 2, border_radius=16)
+    pygame.draw.circle(surface, accent, (rect.x + 18, rect.centery), 6)
+    pygame.draw.circle(surface, (246, 236, 215), (rect.x + 18, rect.centery), 2)
+
+    label_surf = font_small.render(label.upper(), True, TEXT_MUTED)
+    value_surf = font_main.render(str(value), True, TEXT_PRIMARY)
+    surface.blit(label_surf, (rect.x + 32, rect.y + 5))
+    surface.blit(value_surf, (rect.right - value_surf.get_width() - 16, rect.y + 3))
+
 
 class UIManager:
     def __init__(self, screen):
         self.screen = screen
-        self.font       = pygame.font.SysFont(None, 28)
-        self.font_small = pygame.font.SysFont(None, 20)
-        self.font_large = pygame.font.SysFont(None, 36)
+        self.font_title = pygame.font.SysFont("georgia", 27, bold=True)
+        self.font = pygame.font.SysFont("georgia", 18, bold=True)
+        self.font_small = pygame.font.SysFont("georgia", 12, bold=True)
+        self.font_large = pygame.font.SysFont("georgia", 36, bold=True)
 
         self.hud_elements = []        # reserved for future dynamic HUD elements
         self.tower_panel  = self._build_panel_rects()
@@ -36,11 +82,11 @@ class UIManager:
 
     def _build_panel_rects(self):
         """Return a dict of tower_key -> pygame.Rect for each panel button."""
-        panel_x = GAME_W + 20
-        btn_w, btn_h = 160, 60
+        panel_x = GAME_W + 12
+        btn_w, btn_h = 176, 82
         rects = {}
         for i, key in enumerate(TOWER_BUTTONS):
-            y = HUD_HEIGHT + 80 + i * (btn_h + 20)
+            y = HUD_HEIGHT + 120 + i * (btn_h + 18)
             rects[key] = pygame.Rect(panel_x, y, btn_w, btn_h)
         return rects
 
@@ -50,18 +96,25 @@ class UIManager:
 
     def draw_hud(self, gold, castle_hp, wave_number):
         """Draw the top HUD bar with gold, castle HP, and wave number."""
-        pygame.draw.rect(self.screen, (30, 30, 30), (0, 0, SCREEN_W, HUD_HEIGHT))
-        pygame.draw.line(self.screen, (80, 80, 80), (0, HUD_HEIGHT), (SCREEN_W, HUD_HEIGHT), 1)
+        bar_rect = pygame.Rect(0, 0, SCREEN_W, HUD_HEIGHT)
+        _draw_vertical_gradient(self.screen, bar_rect, HUD_BG_TOP, HUD_BG_BOTTOM)
+        pygame.draw.line(self.screen, (60, 75, 98), (0, HUD_HEIGHT), (SCREEN_W, HUD_HEIGHT), 2)
 
-        gold_surf   = self.font.render(f"Gold: {gold}", True, (255, 215, 0))
-        hp_surf     = self.font.render(f"Castle HP: {castle_hp}", True, (220, 80, 80))
-        wave_surf   = self.font.render(f"Wave: {wave_number}", True, (180, 220, 255))
+        title_font = pygame.font.SysFont("georgia", 30, bold=True)
+        subtitle_font = pygame.font.SysFont("georgia", 11, bold=True)
+        title = title_font.render("Kingdom's Last Stand", True, (245, 242, 235))
+        subtitle = subtitle_font.render("Hold the line. Spend wisely. Survive ten waves.", True, (104, 116, 140))
+        self.screen.blit(title, (18, 9))
+        self.screen.blit(subtitle, (20, 38))
 
-        self.screen.blit(gold_surf,  (20,  HUD_HEIGHT // 2 - gold_surf.get_height() // 2))
-        self.screen.blit(hp_surf,    (SCREEN_W // 2 - hp_surf.get_width() // 2,
-                                      HUD_HEIGHT // 2 - hp_surf.get_height() // 2))
-        self.screen.blit(wave_surf,  (SCREEN_W - wave_surf.get_width() - 20,
-                                      HUD_HEIGHT // 2 - wave_surf.get_height() // 2))
+        badges = [
+            (pygame.Rect(370, 15, 128, 28), "Gold", gold, ACCENT_GOLD),
+            (pygame.Rect(506, 15, 164, 28), "Castle HP", castle_hp, (235, 116, 120)),
+            (pygame.Rect(678, 15, 108, 28), "Wave", wave_number, (118, 190, 245)),
+        ]
+
+        for rect, label, value, accent in badges:
+            _draw_stat_badge(self.screen, rect, label, value, accent, self.font_small, self.font)
 
     # ------------------------------------------------------------------
     # Tower panel
@@ -69,40 +122,101 @@ class UIManager:
 
     def draw_tower_panel(self, gold, selected_tower_type=None):
         """Draw the right-side tower selection panel."""
-        panel_rect = pygame.Rect(GAME_W, HUD_HEIGHT, PANEL_WIDTH, GAME_H)
-        pygame.draw.rect(self.screen, (25, 25, 40), panel_rect)
-        pygame.draw.line(self.screen, (80, 80, 80),
-                         (GAME_W, HUD_HEIGHT), (GAME_W, SCREEN_H), 1)
-
-        title = self.font.render("Towers", True, (220, 220, 220))
-        self.screen.blit(title, (GAME_W + PANEL_WIDTH // 2 - title.get_width() // 2,
-                                  HUD_HEIGHT + 20))
+        panel_rect = pygame.Rect(GAME_W, HUD_HEIGHT, PANEL_WIDTH, SCREEN_H - HUD_HEIGHT)
+        _draw_vertical_gradient(self.screen, panel_rect, PANEL_BG, (12, 15, 24))
+        pygame.draw.line(self.screen, PANEL_EDGE, (GAME_W, HUD_HEIGHT), (GAME_W, SCREEN_H), 2)
+        self._draw_armory_header()
+        self._draw_treasury_box(gold)
 
         for key, rect in self.tower_panel.items():
             label, cost, color = TOWER_BUTTONS[key]
             can_afford = gold >= cost
             is_selected = key == selected_tower_type
+            hover = rect.collidepoint(pygame.mouse.get_pos())
+            self._draw_tower_card(key, rect, label, cost, color, can_afford, is_selected, hover)
 
-            # Button background
-            bg_color = color if can_afford else (60, 60, 60)
-            pygame.draw.rect(self.screen, bg_color, rect, border_radius=6)
+        footer = pygame.Rect(GAME_W + 12, SCREEN_H - 42, PANEL_WIDTH - 24, 20)
+        hint = self.font_small.render("ESC clears selection", True, (96, 108, 132))
+        self.screen.blit(hint, (footer.centerx - hint.get_width() // 2, footer.y + 4))
 
-            # Selected highlight
-            if is_selected:
-                pygame.draw.rect(self.screen, (255, 255, 100), rect, 3, border_radius=6)
-            else:
-                pygame.draw.rect(self.screen, (100, 100, 100), rect, 1, border_radius=6)
+    def _draw_armory_header(self):
+        rect = pygame.Rect(GAME_W + 12, HUD_HEIGHT + 16, PANEL_WIDTH - 24, 50)
+        shadow_rect = rect.move(0, 4)
+        pygame.draw.rect(self.screen, (10, 14, 24), shadow_rect, border_radius=18)
+        pygame.draw.rect(self.screen, (42, 51, 76), rect, border_radius=18)
+        pygame.draw.rect(self.screen, (103, 118, 147), rect, 3, border_radius=18)
+        title = pygame.font.SysFont("georgia", 22, bold=True).render("Armory", True, (242, 238, 227))
+        self.screen.blit(title, (rect.centerx - title.get_width() // 2, rect.y + 10))
 
-            # Tower name
-            name_surf = self.font.render(label, True, (255, 255, 255))
-            self.screen.blit(name_surf, (rect.centerx - name_surf.get_width() // 2,
-                                          rect.y + 8))
+    def _draw_treasury_box(self, gold):
+        rect = pygame.Rect(GAME_W + 12, HUD_HEIGHT + 80, PANEL_WIDTH - 24, 30)
+        pygame.draw.rect(self.screen, (34, 43, 64), rect, border_radius=15)
+        pygame.draw.rect(self.screen, (74, 89, 116), rect, 2, border_radius=15)
+        label = pygame.font.SysFont("georgia", 10, bold=True).render("Treasury", True, (160, 171, 189))
+        amount = pygame.font.SysFont("georgia", 17, bold=True).render(f"{gold} gold", True, ACCENT_GOLD)
+        self.screen.blit(label, (rect.x + 14, rect.y + 8))
+        self.screen.blit(amount, (rect.right - amount.get_width() - 12, rect.y + 4))
 
-            # Cost
-            cost_color = (255, 215, 0) if can_afford else (160, 160, 160)
-            cost_surf = self.font_small.render(f"{cost} gold", True, cost_color)
-            self.screen.blit(cost_surf, (rect.centerx - cost_surf.get_width() // 2,
-                                          rect.y + rect.height - cost_surf.get_height() - 8))
+    def _draw_tower_card(self, key, rect, label, cost, color, can_afford, is_selected, hover):
+        base = (35, 42, 62) if can_afford else (47, 50, 58)
+        border = FIELD_GOLD_LIGHT if is_selected else (74, 89, 116)
+        pygame.draw.rect(self.screen, (8, 12, 20), rect.move(0, 5), border_radius=18)
+        pygame.draw.rect(self.screen, base, rect, border_radius=18)
+        pygame.draw.rect(self.screen, border, rect, 2, border_radius=18)
+        if hover and not is_selected:
+            pygame.draw.rect(self.screen, (120, 133, 164), rect.inflate(2, 2), 1, border_radius=19)
+
+        stripe_rect = pygame.Rect(rect.x + 12, rect.y + 12, 7, rect.height - 24)
+        pygame.draw.rect(self.screen, color, stripe_rect, border_radius=5)
+
+        icon_center = (rect.x + 44, rect.y + 41)
+        pygame.draw.circle(self.screen, color, icon_center, 18)
+        self._draw_tower_letter(key, icon_center)
+
+        text_x = rect.x + 72
+        price_rect = pygame.Rect(text_x, rect.y + 30, 44, 18)
+        pygame.draw.rect(self.screen, (57, 68, 94), price_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (101, 116, 144), price_rect, 1, border_radius=10)
+        cost_surf = pygame.font.SysFont("georgia", 10, bold=True).render(
+            f"{cost}g",
+            True,
+            ACCENT_GOLD if can_afford else (160, 160, 160),
+        )
+        self.screen.blit(cost_surf, (price_rect.centerx - cost_surf.get_width() // 2, price_rect.y + 3))
+
+        name_font = pygame.font.SysFont("georgia", 16, bold=True)
+        body_font = pygame.font.SysFont("georgia", 7, bold=True)
+        trait_font = pygame.font.SysFont("georgia", 8, bold=True)
+
+        name_surf = name_font.render(label, True, (247, 244, 236))
+        self.screen.blit(name_surf, (text_x, rect.y + 11))
+        desc = self._get_tower_flavor_text(key)
+        desc_surf = body_font.render(desc, True, (159, 167, 184))
+        self.screen.blit(desc_surf, (text_x, rect.y + 52))
+        trait_surf = trait_font.render(self._get_tower_trait(key), True, color)
+        self.screen.blit(trait_surf, (text_x, rect.y + 66))
+
+    def _draw_tower_letter(self, key, center):
+        x, y = center
+        letters = {"archer": "A", "mage": "M", "cannon": "C"}
+        label = pygame.font.SysFont("georgia", 15, bold=True).render(letters[key], True, (248, 246, 238))
+        self.screen.blit(label, (x - label.get_width() // 2, y - label.get_height() // 2 - 1))
+
+    def _get_tower_trait(self, key):
+        traits = {
+            "archer": "Crit chance",
+            "mage": "Control",
+            "cannon": "AoE burst",
+        }
+        return traits[key]
+
+    def _get_tower_flavor_text(self, key):
+        descriptions = {
+            "archer": "Precise rapid shots",
+            "mage": "Arcane burst and slow",
+            "cannon": "Heavy splash impact",
+        }
+        return descriptions[key]
 
     def get_tower_clicked(self, mouse_pos):
         """Return tower key if a panel button was clicked, else None."""

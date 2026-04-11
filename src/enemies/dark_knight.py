@@ -12,17 +12,10 @@ class DarkKnight(Enemy):
 
     def draw(self, screen):
         x, y = int(self.position.x), int(self.position.y)
-        radius = 18
-
-        # Placeholder: dark grey circle
-        pygame.draw.circle(screen, (60, 60, 60), (x, y), radius)
-
-        # Health bar
-        bar_width = 36
-        bar_height = 4
-        bar_x = x - bar_width // 2
-        bar_y = y - radius - 8
-
-        hp_ratio = self.hp / self.max_hp
-        pygame.draw.rect(screen, (80, 0, 0), (bar_x, bar_y, bar_width, bar_height))
-        pygame.draw.rect(screen, (0, 200, 0), (bar_x, bar_y, int(bar_width * hp_ratio), bar_height))
+        pygame.draw.ellipse(screen, (17, 18, 24), (x - 22, y + 12, 44, 12))
+        pygame.draw.circle(screen, (66, 70, 82), (x, y), 18)
+        pygame.draw.circle(screen, (145, 152, 173), (x, y), 18, 2)
+        pygame.draw.polygon(screen, (34, 36, 44), [(x, y - 22), (x + 18, y - 3), (x, y + 8), (x - 18, y - 3)])
+        pygame.draw.rect(screen, (215, 57, 57), (x - 9, y - 3, 6, 3), border_radius=1)
+        pygame.draw.rect(screen, (215, 57, 57), (x + 3, y - 3, 6, 3), border_radius=1)
+        self._draw_health_bar(screen, x, y, 36, -28, color=(225, 130, 130))

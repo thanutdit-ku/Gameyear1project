@@ -26,12 +26,21 @@ class MageTower(Tower):
 
     def draw(self, screen):
         x, y = int(self.position.x), int(self.position.y)
+        pygame.draw.ellipse(screen, (19, 21, 35), (x - 18, y + 10, 36, 12))
+        pygame.draw.polygon(
+            screen,
+            (67, 56, 126),
+            [(x, y - 18), (x + 14, y - 4), (x + 10, y + 14), (x - 10, y + 14), (x - 14, y - 4)],
+        )
+        pygame.draw.polygon(
+            screen,
+            (205, 145, 255),
+            [(x, y - 14), (x + 9, y - 2), (x, y + 10), (x - 9, y - 2)],
+        )
+        pygame.draw.circle(screen, (244, 230, 255), (x, y - 2), 4)
+        pygame.draw.circle(screen, (180, 228, 255), (x - 10, y - 8), 3)
+        pygame.draw.circle(screen, (180, 228, 255), (x + 10, y - 8), 3)
 
-        # Placeholder: purple square
-        size = 28
-        rect = pygame.Rect(x - size // 2, y - size // 2, size, size)
-        pygame.draw.rect(screen, (128, 0, 200), rect)
-
-        font = pygame.font.SysFont(None, 16)
+        font = pygame.font.SysFont("verdana", 13, bold=True)
         label = font.render(f"Lv{self.level}", True, (255, 255, 255))
-        screen.blit(label, (x - label.get_width() // 2, y - label.get_height() // 2))
+        screen.blit(label, (x - label.get_width() // 2, y + 18))

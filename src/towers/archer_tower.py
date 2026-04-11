@@ -20,12 +20,14 @@ class ArcherTower(Tower):
 
     def draw(self, screen):
         x, y = int(self.position.x), int(self.position.y)
+        pygame.draw.ellipse(screen, (22, 38, 24), (x - 18, y + 10, 36, 12))
+        pygame.draw.circle(screen, (92, 62, 40), (x, y + 2), 14)
+        pygame.draw.circle(screen, (168, 123, 84), (x, y + 2), 14, 2)
+        pygame.draw.line(screen, (73, 121, 68), (x, y - 14), (x, y + 14), 4)
+        pygame.draw.arc(screen, (165, 228, 148), (x - 11, y - 14, 16, 28), 1.2, 5.1, 3)
+        pygame.draw.line(screen, (234, 225, 201), (x - 3, y - 10), (x - 3, y + 10), 2)
+        pygame.draw.line(screen, (234, 225, 201), (x + 2, y - 4), (x + 13, y - 10), 2)
 
-        # Placeholder: green square
-        size = 28
-        rect = pygame.Rect(x - size // 2, y - size // 2, size, size)
-        pygame.draw.rect(screen, (34, 139, 34), rect)
-
-        font = pygame.font.SysFont(None, 16)
+        font = pygame.font.SysFont("verdana", 13, bold=True)
         label = font.render(f"Lv{self.level}", True, (255, 255, 255))
-        screen.blit(label, (x - label.get_width() // 2, y - label.get_height() // 2))
+        screen.blit(label, (x - label.get_width() // 2, y + 18))

@@ -37,13 +37,4 @@ class Goblin(Enemy):
         x, y = int(self.position.x), int(self.position.y)
         sprite_rect = self.sprite.get_rect(midbottom=(x, y + 14))
         screen.blit(self.sprite, sprite_rect)
-
-        # Health bar
-        bar_width = 24
-        bar_height = 4
-        bar_x = x - bar_width // 2
-        bar_y = sprite_rect.top - 10
-
-        hp_ratio = self.hp / self.max_hp
-        pygame.draw.rect(screen, (80, 0, 0), (bar_x, bar_y, bar_width, bar_height))
-        pygame.draw.rect(screen, (0, 200, 0), (bar_x, bar_y, int(bar_width * hp_ratio), bar_height))
+        self._draw_health_bar(screen, x, sprite_rect.top + 8, 24, -18)
