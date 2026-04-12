@@ -36,6 +36,7 @@ You begin with gold and must place towers on the battlefield without blocking th
 ### Enemies
 
 - `Goblin`: basic fast enemy
+- `Bat`: very fast low-health flier that starts appearing in wave 2
 - `SwordShield`: tougher goblin variant using a sprite sheet animation
 - `Orc`: slower and tankier
 - `DarkKnight`: late-wave elite enemy
@@ -105,6 +106,7 @@ Tracked values include:
 ## Notes
 
 - Wave 1 alternates between `Goblin` and `SwordShield`
+- `Bat` joins the enemy pool starting in wave 2
 - Enemy stats scale up as waves increase
 - The battlefield and UI are drawn with custom Pygame rendering
 

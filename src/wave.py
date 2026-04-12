@@ -1,5 +1,6 @@
 import random
 from src.enemies.goblin import Goblin
+from src.enemies.bat import Bat
 from src.enemies.swordshield import SwordShield
 from src.enemies.orc import Orc
 from src.enemies.dark_knight import DarkKnight
@@ -51,17 +52,17 @@ class Wave:
             choices = [Goblin, SwordShield]
             return choices[index % 2](self.waypoints)
         if self.wave_number <= 3:
-            # Early waves: goblins and shield goblins
-            choices = [Goblin, SwordShield]
-            weights = [3, 2]
+            # Early waves: introduce bats from wave 2 onward.
+            choices = [Goblin, SwordShield, Bat]
+            weights = [3, 2, 2]
         elif self.wave_number <= 6:
-            # Mid waves: goblins, shield goblins, and orcs
-            choices = [Goblin, SwordShield, Orc]
-            weights = [3, 2, 1]
+            # Mid waves: bats join the frontline mix with orcs.
+            choices = [Goblin, SwordShield, Bat, Orc]
+            weights = [3, 2, 2, 1]
         else:
             # Late waves: full enemy roster
-            choices = [Goblin, SwordShield, Orc, DarkKnight]
-            weights = [3, 2, 2, 1]
+            choices = [Goblin, SwordShield, Bat, Orc, DarkKnight]
+            weights = [3, 2, 2, 2, 1]
 
         enemy_class = random.choices(choices, weights=weights)[0]
         return enemy_class(self.waypoints)
