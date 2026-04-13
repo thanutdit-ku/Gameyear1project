@@ -120,7 +120,7 @@ class UIManager:
     # Tower panel
     # ------------------------------------------------------------------
 
-    def draw_tower_panel(self, gold, selected_tower_type=None):
+    def draw_tower_panel(self, gold, selected_tower_type=None, sell_mode=False):
         """Draw the right-side tower selection panel."""
         panel_rect = pygame.Rect(GAME_W, HUD_HEIGHT, PANEL_WIDTH, SCREEN_H - HUD_HEIGHT)
         _draw_vertical_gradient(self.screen, panel_rect, PANEL_BG, (12, 15, 24))
@@ -138,6 +138,19 @@ class UIManager:
         footer = pygame.Rect(GAME_W + 12, SCREEN_H - 42, PANEL_WIDTH - 24, 20)
         hint = self.font_small.render("ESC clears selection", True, (96, 108, 132))
         self.screen.blit(hint, (footer.centerx - hint.get_width() // 2, footer.y + 4))
+
+        if sell_mode:
+            sell_font = pygame.font.SysFont("georgia", 13, bold=True)
+            sell_surf = sell_font.render("SELL MODE  (F to exit)", True, (255, 80, 80))
+            sell_bg = pygame.Rect(
+                footer.centerx - (sell_surf.get_width() + 16) // 2,
+                footer.y - sell_surf.get_height() - 10,
+                sell_surf.get_width() + 16,
+                sell_surf.get_height() + 4,
+            )
+            pygame.draw.rect(self.screen, (80, 10, 10), sell_bg, border_radius=6)
+            pygame.draw.rect(self.screen, (220, 60, 60), sell_bg, 1, border_radius=6)
+            self.screen.blit(sell_surf, (sell_bg.x + 8, sell_bg.y + 2))
 
     def _draw_armory_header(self):
         rect = pygame.Rect(GAME_W + 12, HUD_HEIGHT + 16, PANEL_WIDTH - 24, 50)

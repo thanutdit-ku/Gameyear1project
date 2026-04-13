@@ -64,6 +64,7 @@ class Game:
 
         # Placement state
         self.selected_tower_type = None   # "archer" | "mage" | "cannon"
+        self.sell_mode = False
         self.tower_map = {}               # (col, row) -> Tower instance
         self.path_tiles = self._compute_path_tiles()
 
@@ -112,6 +113,12 @@ class Game:
                     continue
                 if event.key == pygame.K_ESCAPE:
                     self.selected_tower_type = None
+                    self.sell_mode = False
+                if event.key == pygame.K_f:
+                    if self.state == self.STATE_PREP:
+                        self.sell_mode = not self.sell_mode
+                        if self.sell_mode:
+                            self.selected_tower_type = None
                 if event.key == pygame.K_q:
                     if self.state in (self.STATE_GAME_OVER, self.STATE_VICTORY):
                         pygame.quit()
@@ -120,7 +127,22 @@ class Game:
             if event.type == pygame.MOUSEBUTTONDOWN:
                 self._handle_click(event.pos, event.button)
 
+    def _get_tower_at(self, pos):
+        """Return the Tower at the given screen position, or None."""
+        col = pos[0] // TILE_SIZE
+        row = (pos[1] - HUD_HEIGHT) // TILE_SIZE
+        return self.tower_map.get((col, row))
+
     def _handle_click(self, pos, button):
+        # Right-click: cycle targeting mode on tower under cursor
+        if button == 3:
+            if self.state in (self.STATE_PREP, self.STATE_WAVE):
+                if pos[0] < GAME_W and pos[1] > HUD_HEIGHT:
+                    tower = self._get_tower_at(pos)
+                    if tower:
+                        tower.cycle_targeting_mode()
+            return
+
         if button != 1:
             return
 
@@ -130,6 +152,20 @@ class Game:
             elif self.home_quit_btn.collidepoint(pos):
                 pygame.quit()
                 sys.exit()
+            return
+
+        # Sell mode: left-click on a tower during PREP to sell it
+        if self.sell_mode and self.state == self.STATE_PREP:
+            if pos[0] < GAME_W and pos[1] > HUD_HEIGHT:
+                col = pos[0] // TILE_SIZE
+                row = (pos[1] - HUD_HEIGHT) // TILE_SIZE
+                tile = (col, row)
+                tower = self.tower_map.get(tile)
+                if tower:
+                    refund = tower.cost // 2
+                    self.gold += refund
+                    self.towers.remove(tower)
+                    del self.tower_map[tile]
             return
 
         # Tower panel buttons
@@ -247,6 +283,7 @@ class Game:
 
     def next_wave(self):
         """Advance to the next wave (called by Start Wave button or externally)."""
+        self.sell_mode = False
         self.current_wave += 1
         self.wave = Wave(self.current_wave, WAYPOINTS)
         self.state = self.STATE_WAVE
@@ -282,12 +319,18 @@ class Game:
 
         for tower in self.towers:
             tower.draw(self.screen)
+            if self.sell_mode:
+                tx, ty = int(tower.position.x), int(tower.position.y)
+                tint = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+                tint.fill((200, 30, 30, 110))
+                pygame.draw.rect(tint, (220, 50, 50, 200), tint.get_rect(), 2)
+                self.screen.blit(tint, (tx - TILE_SIZE // 2, ty - TILE_SIZE // 2))
 
         for enemy in self.enemies:
             enemy.draw(self.screen)
 
         self.ui_manager.draw_hud(self.gold, self.castle_hp, self.current_wave)
-        self.ui_manager.draw_tower_panel(self.gold, self.selected_tower_type)
+        self.ui_manager.draw_tower_panel(self.gold, self.selected_tower_type, self.sell_mode)
         self._draw_placement_preview()
 
         if self.state == self.STATE_PREP:
