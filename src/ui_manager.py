@@ -94,17 +94,29 @@ class UIManager:
     # HUD
     # ------------------------------------------------------------------
 
-    def draw_hud(self, gold, castle_hp, wave_number):
+    def draw_hud(self, gold, castle_hp, wave_number, player_name=""):
         """Draw the top HUD bar with gold, castle HP, and wave number."""
         bar_rect = pygame.Rect(0, 0, SCREEN_W, HUD_HEIGHT)
         _draw_vertical_gradient(self.screen, bar_rect, HUD_BG_TOP, HUD_BG_BOTTOM)
         pygame.draw.line(self.screen, (60, 75, 98), (0, HUD_HEIGHT), (SCREEN_W, HUD_HEIGHT), 2)
 
         title_font = pygame.font.SysFont("georgia", 30, bold=True)
-        subtitle_font = pygame.font.SysFont("georgia", 11, bold=True)
+        subtitle_font = pygame.font.SysFont(["thonburi", "arial", "georgia"], 11, bold=True)
         title = title_font.render("Kingdom's Last Stand", True, (245, 242, 235))
-        subtitle = subtitle_font.render("Hold the line. Spend wisely. Survive ten waves.", True, (104, 116, 140))
         self.screen.blit(title, (18, 9))
+
+        if player_name:
+            display_name = player_name
+            while subtitle_font.size(f"Commander: {display_name}")[0] > 320 and len(display_name) > 1:
+                display_name = display_name[:-1]
+            if display_name != player_name:
+                display_name = display_name[:-1] + "."
+            subtitle_text = f"Commander: {display_name}"
+            subtitle_color = (218, 201, 154)
+        else:
+            subtitle_text = "Hold the line. Spend wisely. Survive ten waves."
+            subtitle_color = (104, 116, 140)
+        subtitle = subtitle_font.render(subtitle_text, True, subtitle_color)
         self.screen.blit(subtitle, (20, 38))
 
         badges = [
@@ -120,8 +132,11 @@ class UIManager:
     # Tower panel
     # ------------------------------------------------------------------
 
-    def draw_tower_panel(self, gold, selected_tower_type=None, sell_mode=False):
+    def draw_tower_panel(self, gold, selected_tower_type=None, sell_mode=False, mouse_pos=None):
         """Draw the right-side tower selection panel."""
+        if mouse_pos is None:
+            mouse_pos = pygame.mouse.get_pos()
+
         panel_rect = pygame.Rect(GAME_W, HUD_HEIGHT, PANEL_WIDTH, SCREEN_H - HUD_HEIGHT)
         _draw_vertical_gradient(self.screen, panel_rect, PANEL_BG, (12, 15, 24))
         pygame.draw.line(self.screen, PANEL_EDGE, (GAME_W, HUD_HEIGHT), (GAME_W, SCREEN_H), 2)
@@ -132,7 +147,7 @@ class UIManager:
             label, cost, color = TOWER_BUTTONS[key]
             can_afford = gold >= cost
             is_selected = key == selected_tower_type
-            hover = rect.collidepoint(pygame.mouse.get_pos())
+            hover = rect.collidepoint(mouse_pos)
             self._draw_tower_card(key, rect, label, cost, color, can_afford, is_selected, hover)
 
         footer = pygame.Rect(GAME_W + 12, SCREEN_H - 42, PANEL_WIDTH - 24, 20)
