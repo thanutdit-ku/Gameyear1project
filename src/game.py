@@ -63,6 +63,56 @@ MAPS = [
         "field": ((70, 80, 42), (85, 96, 49)),
         "grid": (160, 168, 96),
     },
+    {
+        "name": "Stone Spiral",
+        "tagline": "Tight defense",
+        "waypoints": [
+            (0,   180),
+            (120, 180),
+            (120, 460),
+            (260, 460),
+            (260, 260),
+            (420, 260),
+            (420, 420),
+            (600, 420),
+        ],
+        "field": ((58, 72, 82), (70, 86, 98)),
+        "grid": (139, 156, 166),
+    },
+    {
+        "name": "Ember Valley",
+        "tagline": "Short danger",
+        "waypoints": [
+            (0,   330),
+            (180, 330),
+            (180, 210),
+            (360, 210),
+            (360, 360),
+            (500, 360),
+            (500, 250),
+            (600, 250),
+        ],
+        "field": ((94, 58, 38), (112, 70, 44)),
+        "grid": (176, 122, 82),
+    },
+    {
+        "name": "Frost Crossing",
+        "tagline": "Wide zigzag",
+        "waypoints": [
+            (0,   470),
+            (100, 470),
+            (100, 150),
+            (240, 150),
+            (240, 390),
+            (390, 390),
+            (390, 190),
+            (540, 190),
+            (540, 330),
+            (600, 330),
+        ],
+        "field": ((45, 80, 97), (53, 98, 118)),
+        "grid": (125, 180, 196),
+    },
 ]
 
 TOWER_CLASSES = {
@@ -683,11 +733,18 @@ class Game:
         self._draw_home_preview_field(mini_field)
 
         selector_title = pygame.font.SysFont("georgia", 12, bold=True).render("SELECT MAP", True, (218, 201, 154))
-        self.screen.blit(selector_title, (preview_rect.x + 24, preview_rect.bottom - 126))
+        self.screen.blit(selector_title, (preview_rect.x + 24, preview_rect.bottom - 158))
 
         self.home_map_buttons = []
         for map_index, map_data in enumerate(MAPS):
-            rect = pygame.Rect(preview_rect.x + 24 + map_index * 108, preview_rect.bottom - 96, 96, 74)
+            col = map_index % 3
+            row = map_index // 3
+            rect = pygame.Rect(
+                preview_rect.x + 24 + col * 108,
+                preview_rect.bottom - 128 + row * 62,
+                96,
+                54,
+            )
             self.home_map_buttons.append((map_index, rect))
             self._draw_home_map_card(rect, map_index, map_data)
 
@@ -702,15 +759,15 @@ class Game:
         pygame.draw.rect(self.screen, border, rect, 2, border_radius=18)
 
         dark, light = map_data["field"]
-        swatch = pygame.Rect(rect.x + 12, rect.y + 12, 20, 20)
+        swatch = pygame.Rect(rect.x + 10, rect.y + 10, 18, 18)
         pygame.draw.rect(self.screen, dark, swatch, border_radius=6)
         pygame.draw.rect(self.screen, light, swatch.inflate(-6, -6), border_radius=4)
 
-        index_surf = pygame.font.SysFont("georgia", 16, bold=True).render(str(map_index + 1), True, (244, 238, 228))
+        index_surf = pygame.font.SysFont("georgia", 14, bold=True).render(str(map_index + 1), True, (244, 238, 228))
         self.screen.blit(index_surf, (swatch.centerx - index_surf.get_width() // 2, swatch.centery - index_surf.get_height() // 2 - 1))
 
-        title_font = pygame.font.SysFont("georgia", 9, bold=True)
-        tag_font = pygame.font.SysFont("georgia", 7, bold=True)
+        title_font = pygame.font.SysFont("georgia", 8, bold=True)
+        tag_font = pygame.font.SysFont("georgia", 6, bold=True)
         name = map_data["name"]
         while title_font.size(name)[0] > rect.width - 18 and len(name) > 1:
             name = name[:-1]
@@ -718,8 +775,8 @@ class Game:
             name = name[:-1] + "."
         name_surf = title_font.render(name.upper(), True, (242, 236, 224))
         tag_surf = tag_font.render(map_data["tagline"], True, (146, 158, 184))
-        self.screen.blit(name_surf, (rect.x + 10, rect.y + 40))
-        self.screen.blit(tag_surf, (rect.x + 10, rect.y + 56))
+        self.screen.blit(name_surf, (rect.x + 10, rect.y + 31))
+        self.screen.blit(tag_surf, (rect.x + 10, rect.y + 43))
 
     def _draw_name_input(self, rect):
         now = pygame.time.get_ticks()
@@ -747,11 +804,12 @@ class Game:
         while input_font.size(visible_text)[0] > max_width and len(visible_text) > 1:
             visible_text = visible_text[1:]
         value = input_font.render(visible_text, True, text_color)
-        self.screen.blit(value, (rect.x + 14, rect.y + 20))
+        text_y = rect.y + 16
+        self.screen.blit(value, (rect.x + 14, text_y))
 
         if self.home_name_input_active and (now // 420) % 2 == 0:
             cursor_x = rect.x + 14 + value.get_width() + 3
-            pygame.draw.line(self.screen, (244, 238, 228), (cursor_x, rect.y + 20), (cursor_x, rect.y + 35), 2)
+            pygame.draw.line(self.screen, (244, 238, 228), (cursor_x, text_y + 1), (cursor_x, text_y + 16), 2)
 
     def _draw_home_button(self, rect, title, subtitle, top, bottom, hover=False, glow_strength=0.0):
         shadow = rect.move(0, 8)
