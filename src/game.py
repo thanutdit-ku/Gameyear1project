@@ -1,6 +1,8 @@
 import pygame
 import sys
 import unicodedata
+import random
+from collections import Counter
 
 from src.towers.archer_tower import ArcherTower
 from src.towers.mage_tower import MageTower
@@ -171,6 +173,12 @@ class Game:
         # Timing
         self.wave_start_time = 0.0
 
+        # Floating damage numbers
+        self.damage_numbers = []
+
+        # Pre-generated next wave (so preview matches actual wave)
+        self._queued_wave = None
+
         # UI elements owned by Game
         self.font = pygame.font.SysFont("georgia", 26, bold=True)
         self.font_small = pygame.font.SysFont("verdana", 16)
@@ -325,6 +333,7 @@ class Game:
         if self.player_name:
             self.state = self.STATE_PREP
             self.home_name_input_active = False
+            self._queue_next_wave()
         else:
             self.home_name_input_active = True
             self.home_name_error_until = pygame.time.get_ticks() + 1400
@@ -493,14 +502,24 @@ class Game:
             self.castle_hp = max(0, self.castle_hp - CASTLE_DAMAGE_PER_ENEMY)
             self.enemies.remove(enemy)
 
-        # 3. Towers attack; measure net HP lost across all enemies this frame
-        hp_before = sum(e.hp for e in self.enemies)
+        # 3. Towers attack — track per-enemy damage for floating numbers
+        hp_snapshot = {id(e): e.hp for e in self.enemies}
         for tower in self.towers:
             tower.attack(self.enemies, dt)
-        hp_after = sum(e.hp for e in self.enemies)
-        dmg_dealt = hp_before - hp_after
-        if dmg_dealt > 0:
-            self.stats_tracker.record_damage(int(dmg_dealt))
+        total_dmg = 0
+        for enemy in self.enemies:
+            dmg = hp_snapshot.get(id(enemy), enemy.hp) - enemy.hp
+            if dmg > 0:
+                total_dmg += dmg
+                self._spawn_damage_number(int(dmg), enemy.position)
+        if total_dmg > 0:
+            self.stats_tracker.record_damage(int(total_dmg))
+
+        # Tick floating damage numbers
+        for dn in self.damage_numbers:
+            dn["age"] += dt
+            dn["y"] -= 38 * dt
+        self.damage_numbers = [dn for dn in self.damage_numbers if dn["age"] < dn["max_age"]]
 
         # 4. Remove dead enemies and reward gold
         dead = [e for e in self.enemies if e.is_dead()]
@@ -531,12 +550,18 @@ class Game:
     # Wave management
     # ------------------------------------------------------------------
 
+    def _queue_next_wave(self):
+        next_num = self.current_wave + 1
+        if next_num <= MAX_WAVES:
+            self._queued_wave = Wave(next_num, self.waypoints)
+
     def next_wave(self):
         """Advance to the next wave (called by Start Wave button or externally)."""
         self.paused = False
         self.sell_mode = False
         self.current_wave += 1
-        self.wave = Wave(self.current_wave, self.waypoints)
+        self.wave = self._queued_wave or Wave(self.current_wave, self.waypoints)
+        self._queued_wave = None
         self.state = self.STATE_WAVE
         self.wave_start_time = pygame.time.get_ticks() / 1000.0
 
@@ -553,6 +578,7 @@ class Game:
             self.state = self.STATE_VICTORY
         else:
             self.state = self.STATE_PREP
+            self._queue_next_wave()
 
     def check_game_over(self):
         return self.castle_hp <= 0
@@ -590,6 +616,9 @@ class Game:
 
         if self.state == self.STATE_PREP:
             self._draw_start_wave_button()
+            self._draw_wave_preview()
+
+        self._draw_damage_numbers()
 
         if self.state in (self.STATE_GAME_OVER, self.STATE_VICTORY):
             report = self.stats_tracker.generate_report()
@@ -1059,6 +1088,72 @@ class Game:
              self.start_wave_btn.y + 7)
         )
         self.screen.blit(sub, (self.start_wave_btn.centerx - sub.get_width() // 2, self.start_wave_btn.y + 31))
+
+    # Enemy display config for wave preview
+    _ENEMY_PREVIEW = {
+        "Goblin":      ("Goblin",  (80,  210,  80)),
+        "SwordShield": ("Shield",  (90,  150, 230)),
+        "Bat":         ("Bat",     (180, 140, 230)),
+        "Orc":         ("Orc",     (210, 130,  60)),
+        "DarkKnight":  ("Knight",  (220,  70,  70)),
+        "BossEnemy":   ("BOSS",    (255, 210,   0)),
+    }
+
+    def _draw_wave_preview(self):
+        if not self._queued_wave:
+            return
+
+        counts = Counter(type(e).__name__ for e in self._queued_wave.enemy_queue)
+        if not counts:
+            return
+
+        font = pygame.font.SysFont("verdana", 11, bold=True)
+        btn = self.start_wave_btn
+        preview_y = btn.y - 30
+
+        label = font.render("NEXT WAVE:", True, (180, 170, 130))
+        x = btn.centerx - self._preview_total_width(counts, font) // 2
+        self.screen.blit(label, (x, preview_y))
+        x += label.get_width() + 8
+
+        for enemy_name, count in counts.items():
+            short, color = self._ENEMY_PREVIEW.get(enemy_name, (enemy_name[:3], (200, 200, 200)))
+            surf = font.render(f"{short}\u00d7{count}", True, color)
+            shadow = font.render(f"{short}\u00d7{count}", True, (0, 0, 0))
+            self.screen.blit(shadow, (x + 1, preview_y + 1))
+            self.screen.blit(surf, (x, preview_y))
+            x += surf.get_width() + 10
+
+    def _preview_total_width(self, counts, font):
+        label_w = font.size("NEXT WAVE:")[0] + 8
+        items_w = sum(
+            font.size(f"{self._ENEMY_PREVIEW.get(n, (n[:3], None))[0]}\u00d7{c}")[0] + 10
+            for n, c in counts.items()
+        )
+        return label_w + items_w
+
+    def _spawn_damage_number(self, amount, position):
+        self.damage_numbers.append({
+            "text":    str(amount),
+            "x":       float(position.x) + random.randint(-10, 10),
+            "y":       float(position.y) - 18,
+            "age":     0.0,
+            "max_age": 0.85,
+        })
+
+    def _draw_damage_numbers(self):
+        font = pygame.font.SysFont("verdana", 13, bold=True)
+        for dn in self.damage_numbers:
+            alpha = max(0.0, 1.0 - dn["age"] / dn["max_age"])
+            a = int(255 * alpha)
+            shadow = font.render(dn["text"], True, (0, 0, 0))
+            surf   = font.render(dn["text"], True, (255, 230, 70))
+            shadow.set_alpha(a)
+            surf.set_alpha(a)
+            bx = int(dn["x"]) - surf.get_width() // 2
+            by = int(dn["y"])
+            self.screen.blit(shadow, (bx + 1, by + 1))
+            self.screen.blit(surf,   (bx,     by))
 
     def _draw_pause_button(self, mouse_pos):
         self.pause_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 162, PANEL_WIDTH - 48, 32)
