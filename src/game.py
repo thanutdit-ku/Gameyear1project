@@ -183,8 +183,8 @@ class Game:
         self.home_start_btn = pygame.Rect(0, 0, 0, 0)
         self.home_quit_btn = pygame.Rect(0, 0, 0, 0)
         self.home_map_buttons = []
-        self.pause_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 128, PANEL_WIDTH - 48, 32)
-        self.quit_game_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 86, PANEL_WIDTH - 48, 32)
+        self.pause_btn     = pygame.Rect(GAME_W + 24, SCREEN_H - 162, PANEL_WIDTH - 48, 32)
+        self.quit_game_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 120, PANEL_WIDTH - 48, 32)
         self.static_battlefield = self._build_static_battlefield()
         self.home_backdrop = self._build_home_backdrop()
 
@@ -372,7 +372,8 @@ class Game:
                 self.home_name_input_active = False
             return
 
-        # Sell mode: left-click on a tower during PREP to sell it
+        # Sell mode: left-click on a tower in the map area sells it.
+        # Clicks outside the map (sidebar, HUD) fall through to normal handlers.
         if self.sell_mode and self.state == self.STATE_PREP:
             if pos[0] < GAME_W and pos[1] > HUD_HEIGHT:
                 col = pos[0] // TILE_SIZE
@@ -384,12 +385,19 @@ class Game:
                     self.gold += refund
                     self.towers.remove(tower)
                     del self.tower_map[tile]
-            return
+                return  # consumed: map area click (tower sold or empty tile)
 
         # Tower panel buttons
         tower_key = self.ui_manager.get_tower_clicked(pos)
         if tower_key:
             self.selected_tower_type = tower_key
+            return
+
+        if self.ui_manager.sell_btn.collidepoint(pos):
+            if self.state == self.STATE_PREP:
+                self.sell_mode = not self.sell_mode
+                if self.sell_mode:
+                    self.selected_tower_type = None
             return
 
         if self.quit_game_btn.collidepoint(pos):
@@ -644,59 +652,64 @@ class Game:
             ],
         )
 
-        eyebrow = pygame.Rect(panel.x + 24, panel.y + 120, 252, 26)
+        eyebrow = pygame.Rect(panel.x + 24, panel.y + 120, 252, 30)
         pygame.draw.rect(self.screen, (32, 40, 63), eyebrow, border_radius=13)
         pygame.draw.rect(self.screen, (95, 111, 148), eyebrow, 1, border_radius=13)
-        eyebrow_text = pygame.font.SysFont("georgia", 12, bold=True).render(
+        eyebrow_text = pygame.font.SysFont("georgia", 14, bold=True).render(
             "TACTICAL DEFENSE CAMPAIGN",
             True,
             (212, 196, 150),
         )
         self.screen.blit(
             eyebrow_text,
-            (eyebrow.centerx - eyebrow_text.get_width() // 2, eyebrow.y + 6),
+            (eyebrow.centerx - eyebrow_text.get_width() // 2, eyebrow.y + 7),
         )
 
-        title_font = pygame.font.SysFont("georgia", 31, bold=True)
-        title_main = title_font.render("Kingdom's", True, (245, 238, 224))
-        title_sub = title_font.render("Last Stand", True, (245, 238, 224))
-        self.screen.blit(title_main, (panel.x + 24, panel.y + 182))
-        self.screen.blit(title_sub, (panel.x + 24, panel.y + 220))
+        title_font = pygame.font.SysFont("georgia", 32, bold=True)
+        title_shadow_color = (8, 12, 22)
+        for line, y_off in (("Kingdom's", 182), ("Last Stand", 222)):
+            shadow = title_font.render(line, True, title_shadow_color)
+            self.screen.blit(shadow, (panel.x + 25, panel.y + y_off + 2))
+            surf = title_font.render(line, True, (245, 238, 224))
+            self.screen.blit(surf, (panel.x + 24, panel.y + y_off))
 
         accent_line = pygame.Rect(panel.x + 26, panel.y + 276, 118, 4)
         pygame.draw.rect(self.screen, (212, 165, 74), accent_line, border_radius=2)
 
-        body_font = pygame.font.SysFont("georgia", 12, bold=True)
+        body_font = pygame.font.SysFont("georgia", 16, bold=False)
         body_lines = [
             "Marshal archers, mages, and cannons",
             "across a royal field. Hold the road.",
             "Protect the castle.",
         ]
         for index, line in enumerate(body_lines):
-            surf = body_font.render(line, True, (149, 161, 188))
-            self.screen.blit(surf, (panel.x + 24, panel.y + 302 + index * 20))
+            surf = body_font.render(line, True, (160, 172, 196))
+            self.screen.blit(surf, (panel.x + 24, panel.y + 302 + index * 22))
 
-        self.home_name_input_rect = pygame.Rect(panel.x + 24, panel.y + 370, 270, 42)
+        self.home_name_input_rect = pygame.Rect(panel.x + 24, panel.y + 374, 270, 44)
         self._draw_name_input(self.home_name_input_rect)
 
         feature_specs = [
-            ((panel.x + 24, panel.y + 424, 82, 48), (65, 173, 89), "ARCHER", "Rapid shots"),
-            ((panel.x + 119, panel.y + 424, 82, 48), (147, 93, 232), "MAGE", "Slow control"),
-            ((panel.x + 214, panel.y + 424, 82, 48), (218, 109, 32), "CANNON", "Splash burst"),
+            ((panel.x + 24, panel.y + 430, 88, 50), (65, 173, 89),  "ARCHER", "Rapid shots"),
+            ((panel.x + 116, panel.y + 430, 88, 50), (147, 93, 232), "MAGE",   "Slow control"),
+            ((panel.x + 208, panel.y + 430, 88, 50), (218, 109, 32), "CANNON", "Splash burst"),
         ]
+        feat_title_font = pygame.font.SysFont("georgia", 13, bold=True)
+        feat_desc_font  = pygame.font.SysFont("georgia", 10, bold=False)
         for rect_args, color, title, desc in feature_specs:
             rect = pygame.Rect(*rect_args)
             pygame.draw.rect(self.screen, (22, 30, 49), rect, border_radius=18)
             pygame.draw.rect(self.screen, (68, 82, 112), rect, 1, border_radius=18)
-            gem_rect = pygame.Rect(rect.x + 10, rect.y + 7, 16, 34)
-            pygame.draw.rect(self.screen, color, gem_rect, border_radius=8)
-            title_surf = pygame.font.SysFont("georgia", 10, bold=True).render(title, True, (240, 233, 220))
-            desc_surf = pygame.font.SysFont("georgia", 8, bold=True).render(desc, True, (145, 157, 184))
-            self.screen.blit(title_surf, (rect.x + 34, rect.y + 8))
-            self.screen.blit(desc_surf, (rect.x + 34, rect.y + 26))
+            # Narrower gem (6px) leaves 66px of text space to the right
+            gem_rect = pygame.Rect(rect.x + 8, rect.y + 7, 6, 36)
+            pygame.draw.rect(self.screen, color, gem_rect, border_radius=4)
+            title_surf = feat_title_font.render(title, True, (240, 233, 220))
+            desc_surf  = feat_desc_font.render(desc,  True, (145, 157, 184))
+            self.screen.blit(title_surf, (rect.x + 18, rect.y + 8))
+            self.screen.blit(desc_surf,  (rect.x + 18, rect.y + 28))
 
-        self.home_start_btn = pygame.Rect(panel.x + 24, panel.y + 482, 270, 44)
-        self.home_quit_btn = pygame.Rect(panel.x + 82, panel.y + 532, 128, 22)
+        self.home_start_btn = pygame.Rect(panel.x + 24, panel.y + 492, 270, 46)
+        self.home_quit_btn  = pygame.Rect(panel.x + 82, panel.y + 544, 128, 24)
 
         self._draw_home_button(
             self.home_start_btn,
@@ -726,14 +739,14 @@ class Game:
         ribbon = pygame.Rect(preview_rect.x + 26, preview_rect.y + 24, 136, 28)
         pygame.draw.rect(self.screen, (35, 45, 68), ribbon, border_radius=14)
         pygame.draw.rect(self.screen, (96, 112, 146), ribbon, 1, border_radius=14)
-        ribbon_text = pygame.font.SysFont("georgia", 12, bold=True).render("ROYAL DEFENSE", True, (218, 201, 154))
-        self.screen.blit(ribbon_text, (ribbon.centerx - ribbon_text.get_width() // 2, ribbon.y + 6))
+        ribbon_text = pygame.font.SysFont("georgia", 14, bold=True).render("ROYAL DEFENSE", True, (218, 201, 154))
+        self.screen.blit(ribbon_text, (ribbon.centerx - ribbon_text.get_width() // 2, ribbon.y + 7))
 
         mini_field = pygame.Rect(preview_rect.x + 24, preview_rect.y + 70, preview_rect.width - 48, 274)
         self._draw_home_preview_field(mini_field)
 
-        selector_title = pygame.font.SysFont("georgia", 12, bold=True).render("SELECT MAP", True, (218, 201, 154))
-        self.screen.blit(selector_title, (preview_rect.x + 24, preview_rect.bottom - 158))
+        selector_title = pygame.font.SysFont("georgia", 14, bold=True).render("SELECT MAP", True, (218, 201, 154))
+        self.screen.blit(selector_title, (preview_rect.x + 24, preview_rect.bottom - 168))
 
         self.home_map_buttons = []
         for map_index, map_data in enumerate(MAPS):
@@ -741,9 +754,9 @@ class Game:
             row = map_index // 3
             rect = pygame.Rect(
                 preview_rect.x + 24 + col * 108,
-                preview_rect.bottom - 128 + row * 62,
-                96,
-                54,
+                preview_rect.bottom - 150 + row * 74,
+                100,
+                66,
             )
             self.home_map_buttons.append((map_index, rect))
             self._draw_home_map_card(rect, map_index, map_data)
@@ -766,17 +779,13 @@ class Game:
         index_surf = pygame.font.SysFont("georgia", 14, bold=True).render(str(map_index + 1), True, (244, 238, 228))
         self.screen.blit(index_surf, (swatch.centerx - index_surf.get_width() // 2, swatch.centery - index_surf.get_height() // 2 - 1))
 
-        title_font = pygame.font.SysFont("georgia", 8, bold=True)
-        tag_font = pygame.font.SysFont("georgia", 6, bold=True)
-        name = map_data["name"]
-        while title_font.size(name)[0] > rect.width - 18 and len(name) > 1:
-            name = name[:-1]
-        if name != map_data["name"]:
-            name = name[:-1] + "."
-        name_surf = title_font.render(name.upper(), True, (242, 236, 224))
-        tag_surf = tag_font.render(map_data["tagline"], True, (146, 158, 184))
-        self.screen.blit(name_surf, (rect.x + 10, rect.y + 31))
-        self.screen.blit(tag_surf, (rect.x + 10, rect.y + 43))
+        title_font = pygame.font.SysFont("georgia", 12, bold=True)
+        tag_font   = pygame.font.SysFont("georgia", 11, bold=False)
+        # Title-case avoids uppercase pixel-width blowup; all names fit at 12px
+        name_surf = title_font.render(map_data["name"], True, (242, 236, 224))
+        tag_surf  = tag_font.render(map_data["tagline"], True, (146, 158, 184))
+        self.screen.blit(name_surf, (rect.x + 8, rect.y + 32))
+        self.screen.blit(tag_surf,  (rect.x + 8, rect.y + 50))
 
     def _draw_name_input(self, rect):
         now = pygame.time.get_ticks()
@@ -789,7 +798,7 @@ class Game:
         pygame.draw.rect(self.screen, (18, 25, 42), rect, border_radius=14)
         pygame.draw.rect(self.screen, border, rect, 2, border_radius=14)
 
-        label_font = pygame.font.SysFont("georgia", 10, bold=True)
+        label_font = pygame.font.SysFont("georgia", 13, bold=True)
         input_font = pygame.font.SysFont(["thonburi", "arial", "georgia"], 18, bold=True)
         label_text = "COMMANDER NAME"
         if has_error:
@@ -836,7 +845,7 @@ class Game:
             self.screen.blit(title_surf, (rect.centerx - title_surf.get_width() // 2, rect.y + 9))
             self.screen.blit(subtitle_surf, (rect.centerx - subtitle_surf.get_width() // 2, rect.y + 34))
         else:
-            title_surf = pygame.font.SysFont("georgia", 14, bold=True).render(title, True, title_color)
+            title_surf = pygame.font.SysFont("georgia", 16, bold=True).render(title, True, title_color)
             self.screen.blit(title_surf, (rect.centerx - title_surf.get_width() // 2, rect.centery - title_surf.get_height() // 2 - 1))
 
     def _draw_home_preview_field(self, rect):
@@ -1052,7 +1061,7 @@ class Game:
         self.screen.blit(sub, (self.start_wave_btn.centerx - sub.get_width() // 2, self.start_wave_btn.y + 31))
 
     def _draw_pause_button(self, mouse_pos):
-        self.pause_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 130, PANEL_WIDTH - 48, 32)
+        self.pause_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 162, PANEL_WIDTH - 48, 32)
         hover = self.pause_btn.collidepoint(mouse_pos)
         label_text = "Resume" if self.paused else "Pause"
         top = (64, 101, 128) if hover else (42, 58, 82)
@@ -1080,7 +1089,7 @@ class Game:
         )
 
     def _draw_quit_game_button(self, mouse_pos):
-        self.quit_game_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 88, PANEL_WIDTH - 48, 32)
+        self.quit_game_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 120, PANEL_WIDTH - 48, 32)
         hover = self.quit_game_btn.collidepoint(mouse_pos)
         top = (119, 45, 48) if hover else (82, 32, 40)
         bottom = (54, 22, 31)
