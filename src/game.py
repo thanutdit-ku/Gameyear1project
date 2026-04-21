@@ -567,6 +567,7 @@ class Game:
 
     def _end_wave(self):
         self.paused = False
+        self.damage_numbers.clear()
         survival_time = pygame.time.get_ticks() / 1000.0 - self.wave_start_time
         self.stats_tracker.save_to_csv(
             self.current_wave, self.castle_hp, survival_time
