@@ -3,6 +3,7 @@ from src.enemies.goblin import Goblin
 from src.enemies.bat import Bat
 from src.enemies.swordshield import SwordShield
 from src.enemies.orc import Orc
+from src.enemies.spider import Spider
 from src.enemies.dark_knight import DarkKnight
 from src.enemies.boss_enemy import BossEnemy
 from src.enemies.slime import Slime
@@ -56,14 +57,18 @@ class Wave:
             # Early waves: slime still present alongside bats.
             choices = [Slime, Goblin, SwordShield, Bat]
             weights = [2, 3, 2, 2]
-        elif self.wave_number <= 6:
-            # Mid waves: bats join the frontline mix with orcs.
+        elif self.wave_number <= 5:
+            # Mid waves: orcs join the mix.
             choices = [Goblin, SwordShield, Bat, Orc]
             weights = [3, 2, 2, 1]
+        elif self.wave_number <= 8:
+            # After wave 5: spiders appear.
+            choices = [Goblin, SwordShield, Bat, Orc, Spider]
+            weights = [2, 2, 2, 2, 2]
         else:
-            # Late waves: full enemy roster
-            choices = [Goblin, SwordShield, Bat, Orc, DarkKnight]
-            weights = [3, 2, 2, 2, 1]
+            # Late waves: full enemy roster including dark knights.
+            choices = [Goblin, SwordShield, Bat, Orc, Spider, DarkKnight]
+            weights = [2, 2, 1, 2, 2, 1]
 
         enemy_class = random.choices(choices, weights=weights)[0]
         return enemy_class(self.waypoints)

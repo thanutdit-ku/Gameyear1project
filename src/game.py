@@ -197,6 +197,11 @@ class Game:
         self.static_battlefield = self._build_static_battlefield()
         self.home_backdrop = self._build_home_backdrop()
 
+        # End-game screen buttons (set each frame when drawn)
+        self.total_gold_earned = 0
+        self.end_main_menu_btn = pygame.Rect(0, 0, 0, 0)
+        self.end_quit_btn      = pygame.Rect(0, 0, 0, 0)
+
     def _set_display_mode(self):
         if self.fullscreen:
             try:
@@ -249,6 +254,20 @@ class Game:
         pygame.display.flip()
 
     # ------------------------------------------------------------------
+    # Public state accessor
+    # ------------------------------------------------------------------
+
+    @property
+    def game_state(self):
+        if self.state == self.STATE_HOME:
+            return "menu"
+        if self.state in (self.STATE_PREP, self.STATE_WAVE):
+            return "playing"
+        if self.state == self.STATE_VICTORY:
+            return "victory"
+        return "game_over"
+
+    # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
 
@@ -288,7 +307,7 @@ class Game:
                     self.selected_tower_type = None
                     self.sell_mode = False
                 if event.key == pygame.K_f:
-                    if self.state == self.STATE_PREP:
+                    if self.state in (self.STATE_PREP, self.STATE_WAVE):
                         self.sell_mode = not self.sell_mode
                         if self.sell_mode:
                             self.selected_tower_type = None
@@ -382,9 +401,17 @@ class Game:
                 self.home_name_input_active = False
             return
 
+        if self.state in (self.STATE_GAME_OVER, self.STATE_VICTORY):
+            if self.end_main_menu_btn.collidepoint(pos):
+                self._reset_for_main_menu()
+            elif self.end_quit_btn.collidepoint(pos):
+                pygame.quit()
+                sys.exit()
+            return
+
         # Sell mode: left-click on a tower in the map area sells it.
         # Clicks outside the map (sidebar, HUD) fall through to normal handlers.
-        if self.sell_mode and self.state == self.STATE_PREP:
+        if self.sell_mode and self.state in (self.STATE_PREP, self.STATE_WAVE):
             if pos[0] < GAME_W and pos[1] > HUD_HEIGHT:
                 col = pos[0] // TILE_SIZE
                 row = (pos[1] - HUD_HEIGHT) // TILE_SIZE
@@ -404,7 +431,7 @@ class Game:
             return
 
         if self.ui_manager.sell_btn.collidepoint(pos):
-            if self.state == self.STATE_PREP:
+            if self.state in (self.STATE_PREP, self.STATE_WAVE):
                 self.sell_mode = not self.sell_mode
                 if self.sell_mode:
                     self.selected_tower_type = None
@@ -526,6 +553,7 @@ class Game:
         dead = [e for e in self.enemies if e.is_dead()]
         for enemy in dead:
             self.gold += enemy.reward_gold
+            self.total_gold_earned += enemy.reward_gold
             self.stats_tracker.record_kill()
             self.enemies.remove(enemy)
             if getattr(enemy, "splits_on_death", False):
@@ -628,9 +656,10 @@ class Game:
 
         self._draw_damage_numbers()
 
-        if self.state in (self.STATE_GAME_OVER, self.STATE_VICTORY):
-            report = self.stats_tracker.generate_report()
-            self.ui_manager.draw_stats_screen(report, self.stats_tracker.history)
+        if self.state == self.STATE_VICTORY:
+            self._draw_victory_screen()
+        elif self.state == self.STATE_GAME_OVER:
+            self._draw_game_over_screen()
         elif self.paused:
             self._draw_pause_overlay()
 
@@ -1104,6 +1133,7 @@ class Game:
         "SwordShield": ("Shield",  (90,  150, 230)),
         "Bat":         ("Bat",     (180, 140, 230)),
         "Orc":         ("Orc",     (210, 130,  60)),
+        "Spider":      ("Spider",  (200,  80,  80)),
         "DarkKnight":  ("Knight",  (220,  70,  70)),
         "BossEnemy":   ("BOSS",    (255, 210,   0)),
     }
@@ -1220,6 +1250,134 @@ class Game:
                 self.quit_game_btn.centery - label.get_height() // 2 - 1,
             ),
         )
+
+    def _reset_for_main_menu(self):
+        self.gold            = 200
+        self.castle_hp       = 100
+        self.current_wave    = 0
+        self.towers          = []
+        self.enemies         = []
+        self.wave            = None
+        self.tower_map       = {}
+        self.damage_numbers.clear()
+        self._queued_wave       = None
+        self.selected_tower_type = None
+        self.sell_mode          = False
+        self.total_gold_earned  = 0
+        self.paused             = False
+        self.stats_tracker      = StatsTracker()
+        self.ui_manager.stats_screen = None
+        self.path_tiles         = self._compute_path_tiles()
+        self.static_battlefield = self._build_static_battlefield()
+        self.state              = self.STATE_HOME
+        self.home_name_input_active = True
+        self.player_name        = ""
+
+    def _draw_end_button(self, rect, text, top_color, bottom_color, mouse_pos):
+        if rect.collidepoint(mouse_pos):
+            top_color = tuple(min(255, c + 22) for c in top_color)
+        pygame.draw.rect(self.screen, (6, 9, 16), rect.move(0, 5), border_radius=14)
+        for offset in range(rect.height):
+            t = offset / max(rect.height, 1)
+            color = tuple(int(top_color[i] + (bottom_color[i] - top_color[i]) * t) for i in range(3))
+            pygame.draw.line(self.screen, color,
+                             (rect.left, rect.top + offset), (rect.right, rect.top + offset))
+        border = tuple(min(255, c + 60) for c in top_color)
+        pygame.draw.rect(self.screen, border, rect, 2, border_radius=14)
+        lbl = pygame.font.SysFont("georgia", 18, bold=True).render(text, True, (245, 240, 230))
+        self.screen.blit(lbl, (rect.centerx - lbl.get_width() // 2,
+                               rect.centery - lbl.get_height() // 2))
+
+    def _draw_victory_screen(self):
+        overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 190))
+        self.screen.blit(overlay, (0, 0))
+
+        panel_w, panel_h = 500, 350
+        panel = pygame.Rect((SCREEN_W - panel_w) // 2, (SCREEN_H - panel_h) // 2, panel_w, panel_h)
+        pygame.draw.rect(self.screen, (14, 20, 36), panel.move(0, 8), border_radius=24)
+        pygame.draw.rect(self.screen, (14, 20, 36), panel, border_radius=24)
+        pygame.draw.rect(self.screen, (212, 175, 55), panel, 3, border_radius=24)
+
+        title_font = pygame.font.SysFont("georgia", 60, bold=True)
+        title = title_font.render("VICTORY!", True, (255, 215, 0))
+        self.screen.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 16))
+
+        sub_font = pygame.font.SysFont("georgia", 16)
+        subtitle = sub_font.render("You defended the kingdom!", True, (200, 190, 160))
+        self.screen.blit(subtitle, (panel.centerx - subtitle.get_width() // 2, panel.y + 88))
+
+        pygame.draw.line(self.screen, (212, 175, 55),
+                         (panel.x + 30, panel.y + 114), (panel.right - 30, panel.y + 114), 1)
+
+        total_kills = sum(d["enemies_defeated"] for d in self.stats_tracker.history)
+        stat_font = pygame.font.SysFont("georgia", 19, bold=True)
+        stats_rows = [
+            ("Waves Survived",    str(self.current_wave)),
+            ("Enemies Defeated",  str(total_kills)),
+            ("Gold Earned",       str(self.total_gold_earned)),
+        ]
+        for i, (label, value) in enumerate(stats_rows):
+            y = panel.y + 128 + i * 40
+            lbl_s = stat_font.render(label, True, (180, 172, 148))
+            val_s = stat_font.render(value, True, (245, 232, 188))
+            self.screen.blit(lbl_s, (panel.x + 40, y))
+            self.screen.blit(val_s, (panel.right - val_s.get_width() - 40, y))
+
+        btn_w, btn_h = 200, 48
+        btn_y = panel.bottom - 64
+        self.end_main_menu_btn = pygame.Rect(panel.centerx - btn_w - 10, btn_y, btn_w, btn_h)
+        self.end_quit_btn      = pygame.Rect(panel.centerx + 10,         btn_y, btn_w, btn_h)
+        mouse_pos = self._get_mouse_pos()
+        self._draw_end_button(self.end_main_menu_btn, "Main Menu",
+                              (55, 80, 130), (38, 55, 92), mouse_pos)
+        self._draw_end_button(self.end_quit_btn, "Quit Game",
+                              (130, 45, 45), (92, 30, 35), mouse_pos)
+
+    def _draw_game_over_screen(self):
+        overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 190))
+        self.screen.blit(overlay, (0, 0))
+
+        panel_w, panel_h = 480, 310
+        panel = pygame.Rect((SCREEN_W - panel_w) // 2, (SCREEN_H - panel_h) // 2, panel_w, panel_h)
+        pygame.draw.rect(self.screen, (14, 20, 36), panel.move(0, 8), border_radius=24)
+        pygame.draw.rect(self.screen, (14, 20, 36), panel, border_radius=24)
+        pygame.draw.rect(self.screen, (192, 48, 48), panel, 3, border_radius=24)
+
+        title_font = pygame.font.SysFont("georgia", 58, bold=True)
+        title = title_font.render("GAME OVER", True, (220, 55, 55))
+        self.screen.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 18))
+
+        sub_font = pygame.font.SysFont("georgia", 16)
+        subtitle = sub_font.render("The castle has fallen.", True, (200, 170, 160))
+        self.screen.blit(subtitle, (panel.centerx - subtitle.get_width() // 2, panel.y + 84))
+
+        pygame.draw.line(self.screen, (192, 48, 48),
+                         (panel.x + 30, panel.y + 110), (panel.right - 30, panel.y + 110), 1)
+
+        total_kills = sum(d["enemies_defeated"] for d in self.stats_tracker.history)
+        stat_font = pygame.font.SysFont("georgia", 19, bold=True)
+        stats_rows = [
+            ("Wave Reached",     str(self.current_wave)),
+            ("Enemies Defeated", str(total_kills)),
+        ]
+        for i, (label, value) in enumerate(stats_rows):
+            y = panel.y + 124 + i * 40
+            lbl_s = stat_font.render(label, True, (180, 165, 155))
+            val_s = stat_font.render(value, True, (245, 220, 200))
+            self.screen.blit(lbl_s, (panel.x + 40, y))
+            self.screen.blit(val_s, (panel.right - val_s.get_width() - 40, y))
+
+        btn_w, btn_h = 190, 48
+        btn_y = panel.bottom - 62
+        self.end_main_menu_btn = pygame.Rect(panel.centerx - btn_w - 10, btn_y, btn_w, btn_h)
+        self.end_quit_btn      = pygame.Rect(panel.centerx + 10,         btn_y, btn_w, btn_h)
+        mouse_pos = self._get_mouse_pos()
+        self._draw_end_button(self.end_main_menu_btn, "Main Menu",
+                              (55, 80, 130), (38, 55, 92), mouse_pos)
+        self._draw_end_button(self.end_quit_btn, "Quit Game",
+                              (130, 45, 45), (92, 30, 35), mouse_pos)
 
     def _draw_pause_overlay(self):
         overlay = pygame.Surface((GAME_W, SCREEN_H), pygame.SRCALPHA)
