@@ -5,6 +5,7 @@ from src.enemies.swordshield import SwordShield
 from src.enemies.orc import Orc
 from src.enemies.dark_knight import DarkKnight
 from src.enemies.boss_enemy import BossEnemy
+from src.enemies.slime import Slime
 
 
 class Wave:
@@ -48,13 +49,13 @@ class Wave:
     def _pick_enemy_type(self, index=0):
         """Return a new enemy instance based on wave progression."""
         if self.wave_number == 1:
-            # First wave: alternate the two goblin variants for variety.
-            choices = [Goblin, SwordShield]
+            # First wave: alternate slime and goblin for a gentle intro.
+            choices = [Slime, Goblin]
             return choices[index % 2](self.waypoints)
         if self.wave_number <= 3:
-            # Early waves: introduce bats from wave 2 onward.
-            choices = [Goblin, SwordShield, Bat]
-            weights = [3, 2, 2]
+            # Early waves: slime still present alongside bats.
+            choices = [Slime, Goblin, SwordShield, Bat]
+            weights = [2, 3, 2, 2]
         elif self.wave_number <= 6:
             # Mid waves: bats join the frontline mix with orcs.
             choices = [Goblin, SwordShield, Bat, Orc]

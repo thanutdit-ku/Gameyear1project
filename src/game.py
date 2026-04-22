@@ -8,6 +8,7 @@ from src.towers.archer_tower import ArcherTower
 from src.towers.mage_tower import MageTower
 from src.towers.cannon_tower import CannonTower
 from src.wave import Wave
+from src.enemies.slime import MiniSlime
 from src.stats_tracker import StatsTracker
 from src.ui_manager import UIManager, GAME_W, GAME_H, HUD_HEIGHT, PANEL_WIDTH, SCREEN_W, SCREEN_H
 
@@ -527,6 +528,12 @@ class Game:
             self.gold += enemy.reward_gold
             self.stats_tracker.record_kill()
             self.enemies.remove(enemy)
+            if getattr(enemy, "splits_on_death", False):
+                for offset in (-10, 10):
+                    mini = MiniSlime(self.waypoints)
+                    mini.position = pygame.Vector2(enemy.position.x + offset, enemy.position.y)
+                    mini.path_index = enemy.path_index
+                    self.enemies.append(mini)
 
         # 5. Check castle destroyed
         if self.check_game_over():
@@ -1092,6 +1099,7 @@ class Game:
 
     # Enemy display config for wave preview
     _ENEMY_PREVIEW = {
+        "Slime":       ("Slime",   (100, 220, 100)),
         "Goblin":      ("Goblin",  (80,  210,  80)),
         "SwordShield": ("Shield",  (90,  150, 230)),
         "Bat":         ("Bat",     (180, 140, 230)),
