@@ -170,6 +170,7 @@ class Game:
         self.sell_mode = False
         self.tower_map = {}               # (col, row) -> Tower instance
         self.path_tiles = self._compute_path_tiles()
+        self._invalid_placement_flashes = []  # [{"col", "row", "timer"}]
 
         # Timing
         self.wave_start_time = 0.0
@@ -481,13 +482,18 @@ class Game:
         row = (pos[1] - HUD_HEIGHT) // TILE_SIZE
         tile = (col, row)
 
-        if tile in self.path_tiles:
+        max_col = GAME_W // TILE_SIZE - 1
+        max_row = (SCREEN_H - HUD_HEIGHT) // TILE_SIZE - 1
+        if col < 0 or col > max_col or row < 0 or row > max_row:
             return
-        if tile in self.tower_map:
+
+        if tile in self.path_tiles or tile in self.tower_map:
+            self._flash_invalid(col, row)
             return
 
         cost = TOWER_COSTS[self.selected_tower_type]
         if self.gold < cost:
+            self._flash_invalid(col, row)
             return
 
         px = col * TILE_SIZE + TILE_SIZE // 2
@@ -499,6 +505,13 @@ class Game:
         self.gold -= cost
         self.stats_tracker.record_gold_spent(cost)
 
+    def _flash_invalid(self, col, row):
+        for f in self._invalid_placement_flashes:
+            if f["col"] == col and f["row"] == row:
+                f["timer"] = 0.45
+                return
+        self._invalid_placement_flashes.append({"col": col, "row": row, "timer": 0.45})
+
     # ------------------------------------------------------------------
     # Update
     # ------------------------------------------------------------------
@@ -506,6 +519,11 @@ class Game:
     def update(self, dt):
         if self.state == self.STATE_HOME:
             return
+
+        # Always tick flashes so they fade even in prep/paused state
+        for f in self._invalid_placement_flashes:
+            f["timer"] -= dt
+        self._invalid_placement_flashes = [f for f in self._invalid_placement_flashes if f["timer"] > 0]
 
         if self.paused:
             return
@@ -1260,6 +1278,7 @@ class Game:
         self.wave            = None
         self.tower_map       = {}
         self.damage_numbers.clear()
+        self._invalid_placement_flashes.clear()
         self._queued_wave       = None
         self.selected_tower_type = None
         self.sell_mode          = False
@@ -1395,6 +1414,15 @@ class Game:
         self.screen.blit(hint, (panel.centerx - hint.get_width() // 2, panel.y + 66))
 
     def _draw_placement_preview(self):
+        # Draw denied-placement flashes first (shown regardless of selected type)
+        for f in self._invalid_placement_flashes:
+            alpha = int(200 * (f["timer"] / 0.45))
+            r = pygame.Rect(f["col"] * TILE_SIZE, f["row"] * TILE_SIZE + HUD_HEIGHT, TILE_SIZE, TILE_SIZE)
+            flash = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+            flash.fill((255, 60, 60, alpha))
+            self.screen.blit(flash, r.topleft)
+            pygame.draw.rect(self.screen, (255, 120, 120), r, 2, border_radius=4)
+
         if not self.selected_tower_type:
             return
 
@@ -1404,18 +1432,35 @@ class Game:
 
         col = mouse_x // TILE_SIZE
         row = (mouse_y - HUD_HEIGHT) // TILE_SIZE
+        max_col = GAME_W // TILE_SIZE - 1
+        max_row = (SCREEN_H - HUD_HEIGHT) // TILE_SIZE - 1
+        if col < 0 or col > max_col or row < 0 or row > max_row:
+            return
+
         tile = (col, row)
         rect = pygame.Rect(col * TILE_SIZE, row * TILE_SIZE + HUD_HEIGHT, TILE_SIZE, TILE_SIZE)
         valid = tile not in self.path_tiles and tile not in self.tower_map and self.gold >= TOWER_COSTS[self.selected_tower_type]
-        fill = (111, 196, 118) if valid else (196, 92, 92)
-        outline = (227, 248, 210) if valid else (249, 214, 214)
 
-        pygame.draw.rect(self.screen, fill, rect, border_radius=8)
-        pygame.draw.rect(self.screen, outline, rect, 2, border_radius=8)
+        # Semi-transparent tile tint
+        overlay = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+        if valid:
+            overlay.fill((80, 210, 100, 150))
+            border_color = (180, 255, 190)
+        else:
+            overlay.fill((210, 60, 60, 150))
+            border_color = (255, 170, 170)
+        self.screen.blit(overlay, rect.topleft)
+        pygame.draw.rect(self.screen, border_color, rect, 2, border_radius=4)
 
-        center = rect.center
-        range_radius = int(TOWER_CLASSES[self.selected_tower_type]((0, 0)).attack_range)
-        pygame.draw.circle(self.screen, (*fill, 40), center, range_radius, 1)
+        # Range circle — only draw when placement would be valid
+        if valid:
+            center = rect.center
+            range_radius = int(TOWER_CLASSES[self.selected_tower_type]((0, 0)).attack_range)
+            range_surf = pygame.Surface((range_radius * 2 + 4, range_radius * 2 + 4), pygame.SRCALPHA)
+            cx = cy = range_radius + 2
+            pygame.draw.circle(range_surf, (80, 210, 100, 35), (cx, cy), range_radius)
+            pygame.draw.circle(range_surf, (180, 255, 190, 100), (cx, cy), range_radius, 1)
+            self.screen.blit(range_surf, (center[0] - cx, center[1] - cy))
 
     # ------------------------------------------------------------------
     # Path tile computation
@@ -1423,20 +1468,47 @@ class Game:
 
     def _compute_path_tiles(self):
         """Return a set of (col, row) tiles that overlap the enemy path.
-        These tiles are blocked from tower placement."""
+
+        Uses precise rectangle-overlap math based on the actual drawn path
+        width (TILE_SIZE + 8 outer border = 48px, half = 24px).  Each
+        axis-aligned segment produces an axis-aligned rectangle; every grid
+        tile that intersects that rectangle is marked as a path tile.
+        Corner waypoints are also expanded by the half-width so that the
+        full corner square is blocked.
+        """
+        half = (TILE_SIZE + 8) // 2  # 24 px — half the outer path width
+
         path_tiles = set()
+
+        def _mark_rect(left, top, right, bottom):
+            col_min = left // TILE_SIZE
+            col_max = (right - 1) // TILE_SIZE
+            row_min = (top - HUD_HEIGHT) // TILE_SIZE
+            row_max = (bottom - 1 - HUD_HEIGHT) // TILE_SIZE
+            for c in range(col_min, col_max + 1):
+                for r in range(row_min, row_max + 1):
+                    path_tiles.add((c, r))
+
         for i in range(len(self.waypoints) - 1):
             x1, y1 = self.waypoints[i]
             x2, y2 = self.waypoints[i + 1]
-            steps = max(abs(x2 - x1), abs(y2 - y1)) // 4 + 1
-            for s in range(steps + 1):
-                t = s / steps
-                px = int(x1 + (x2 - x1) * t)
-                py = int(y1 + (y2 - y1) * t)
-                col = px // TILE_SIZE
-                row = (py - HUD_HEIGHT) // TILE_SIZE
-                # Buffer one tile on each side to match path visual width
-                for dc in range(-1, 2):
-                    for dr in range(-1, 2):
-                        path_tiles.add((col + dc, row + dr))
+
+            if abs(x2 - x1) >= abs(y2 - y1):  # horizontal segment
+                seg_left   = min(x1, x2)
+                seg_right  = max(x1, x2) + 1
+                seg_top    = y1 - half
+                seg_bottom = y1 + half + 1
+            else:                               # vertical segment
+                seg_left   = x1 - half
+                seg_right  = x1 + half + 1
+                seg_top    = min(y1, y2)
+                seg_bottom = max(y1, y2) + 1
+
+            _mark_rect(seg_left, seg_top, seg_right, seg_bottom)
+
+        # Also block the square around each waypoint corner so there are no
+        # gaps where two segments meet at an angle.
+        for x, y in self.waypoints:
+            _mark_rect(x - half, y - half, x + half + 1, y + half + 1)
+
         return path_tiles
