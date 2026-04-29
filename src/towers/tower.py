@@ -41,21 +41,24 @@ class Tower:
         return min(in_range, key=lambda e: self.position.distance_to(e.position))
 
     def attack(self, enemies, dt):
-        """Reduce cooldown each frame; fire at the best target when ready."""
+        """Reduce cooldown each frame; fire at the best target when ready.
+        Returns a Projectile when one is spawned, else None."""
         self._attack_cooldown -= dt
         if self._attack_cooldown > 0:
-            return
+            return None
 
         target = self.find_target(enemies)
         if target is None:
-            return
+            return None
 
-        self._on_attack(target, enemies)
+        projectile = self._on_attack(target, enemies)
         self._attack_cooldown = 1.0 / self.attack_speed
+        return projectile
 
     def _on_attack(self, target, enemies):
-        """Apply damage to the target. Subclasses can override for special behaviour."""
+        """Spawn a projectile or deal instant damage. Return Projectile or None."""
         target.take_damage(self.damage)
+        return None
 
     def upgrade(self):
         """Increase level and boost stats. Subclasses may override for custom scaling."""

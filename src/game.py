@@ -7,6 +7,7 @@ from collections import Counter
 from src.towers.archer_tower import ArcherTower
 from src.towers.mage_tower import MageTower
 from src.towers.cannon_tower import CannonTower
+from src.projectiles import Projectile
 from src.wave import Wave
 from src.enemies.slime import MiniSlime
 from src.stats_tracker import StatsTracker
@@ -174,6 +175,9 @@ class Game:
 
         # Timing
         self.wave_start_time = 0.0
+
+        # Projectiles in flight
+        self.projectiles = []
 
         # Floating damage numbers
         self.damage_numbers = []
@@ -548,10 +552,18 @@ class Game:
             self.castle_hp = max(0, self.castle_hp - CASTLE_DAMAGE_PER_ENEMY)
             self.enemies.remove(enemy)
 
-        # 3. Towers attack — track per-enemy damage for floating numbers
-        hp_snapshot = {id(e): e.hp for e in self.enemies}
+        # 3. Towers fire projectiles
         for tower in self.towers:
-            tower.attack(self.enemies, dt)
+            proj = tower.attack(self.enemies, dt)
+            if proj is not None:
+                self.projectiles.append(proj)
+
+        # 4. Update projectiles; track damage dealt this frame
+        hp_snapshot = {id(e): e.hp for e in self.enemies}
+        for proj in self.projectiles:
+            proj.update(dt, self.enemies)
+        self.projectiles = [p for p in self.projectiles if not p.done]
+
         total_dmg = 0
         for enemy in self.enemies:
             dmg = hp_snapshot.get(id(enemy), enemy.hp) - enemy.hp
@@ -615,6 +627,7 @@ class Game:
         self.current_wave += 1
         self.wave = self._queued_wave or Wave(self.current_wave, self.waypoints)
         self._queued_wave = None
+        self.projectiles = []
         self.state = self.STATE_WAVE
         self.wave_start_time = pygame.time.get_ticks() / 1000.0
 
@@ -660,6 +673,9 @@ class Game:
 
         for enemy in self.enemies:
             enemy.draw(self.screen)
+
+        for proj in self.projectiles:
+            proj.draw(self.screen)
 
         self.ui_manager.draw_hud(self.gold, self.castle_hp, self.current_wave, self.player_name)
         mouse_pos = self._get_mouse_pos()

@@ -3,9 +3,7 @@ from pathlib import Path
 import pygame
 
 from src.towers.tower import Tower
-
-SLOW_FACTOR = 0.5   # reduce speed to 50%
-SLOW_DURATION = 2.0  # seconds
+from src.projectiles import MagicOrb
 
 
 class MageTower(Tower):
@@ -15,22 +13,13 @@ class MageTower(Tower):
 
     def __init__(self, position):
         super().__init__(position, cost=150)
-        self.damage = 60
+        self.damage = 30
         self.attack_range = 120
-        self.attack_speed = 0.8
+        self.attack_speed = 1.6
         self.frames = self._load_frames()
 
     def _on_attack(self, target, enemies):
-        target.take_damage(self.damage)
-        self._apply_slow(target)
-
-    def _apply_slow(self, enemy):
-        """Slow the enemy to 50% speed for 2 seconds.
-        Requires the Enemy base class to support slow_timer and base_speed."""
-        if not hasattr(enemy, "base_speed"):
-            enemy.base_speed = enemy.speed
-        enemy.speed = enemy.base_speed * SLOW_FACTOR
-        enemy.slow_timer = SLOW_DURATION
+        return MagicOrb(self.position, target, self.damage)
 
     @classmethod
     def _load_frames(cls):

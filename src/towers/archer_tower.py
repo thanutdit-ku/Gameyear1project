@@ -2,6 +2,7 @@ import os
 import pygame
 import random
 from src.towers.tower import Tower, TARGETING_LABELS
+from src.projectiles import Arrow
 
 IDLE_DIR     = os.path.join("assets", "images", "towers", "archer")
 SHOOT_DIR    = os.path.join("assets", "images", "towers", "archer_shoot")
@@ -40,7 +41,10 @@ class ArcherTower(Tower):
         for filename in files:
             path = os.path.join(directory, filename)
             img = pygame.image.load(path).convert_alpha()
-            img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+            img = pygame.transform.flip(
+                pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE)),
+                True, False,
+            )
             frames.append(img)
         return frames
 
@@ -48,13 +52,13 @@ class ArcherTower(Tower):
         dmg = self.damage
         if random.random() < self.CRIT_CHANCE:
             dmg *= 2
-        target.take_damage(dmg)
         now = pygame.time.get_ticks()
         if not self._is_shooting:
             self._is_shooting    = True
             self.current_frame   = 0
             self.animation_timer = now
         self._shoot_end_time = now + SHOOT_LINGER
+        return Arrow(self.position, target, dmg)
 
     def draw(self, screen):
         x, y = int(self.position.x), int(self.position.y)

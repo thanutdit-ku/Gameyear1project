@@ -1,6 +1,7 @@
 import os
 import pygame
 from src.towers.tower import Tower, TARGETING_LABELS
+from src.projectiles import Cannonball
 
 ANIM_FPS = 8
 FRAME_SIZE = 64
@@ -27,15 +28,13 @@ class CannonTower(Tower):
 
     def __init__(self, position):
         super().__init__(position, cost=125)
-        self.damage = 40
+        self.damage = 10
         self.attack_range = 100
-        self.attack_speed = 0.5
+        self.attack_speed = 2.5
         self._load_frames()
 
     def _on_attack(self, target, enemies):
-        for enemy in enemies:
-            if target.position.distance_to(enemy.position) <= self.SPLASH_RADIUS:
-                enemy.take_damage(self.damage)
+        return Cannonball(self.position, target, self.damage)
 
     def draw(self, screen):
         x, y = int(self.position.x), int(self.position.y)
