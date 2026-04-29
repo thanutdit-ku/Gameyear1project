@@ -872,15 +872,15 @@ class Game:
         ]
         for index, line in enumerate(body_lines):
             surf = body_font.render(line, True, (160, 172, 196))
-            self.screen.blit(surf, (panel.x + 24, panel.y + 302 + index * 22))
+            self.screen.blit(surf, (panel.x + 24, panel.y + 268 + index * 22))
 
-        self.home_name_input_rect = pygame.Rect(panel.x + 24, panel.y + 374, 270, 44)
+        self.home_name_input_rect = pygame.Rect(panel.x + 24, panel.y + 340, 270, 44)
         self._draw_name_input(self.home_name_input_rect)
 
         feature_specs = [
-            ((panel.x + 24, panel.y + 430, 88, 50), (65, 173, 89),  "ARCHER", "Rapid shots"),
-            ((panel.x + 116, panel.y + 430, 88, 50), (147, 93, 232), "MAGE",   "Slow control"),
-            ((panel.x + 208, panel.y + 430, 88, 50), (218, 109, 32), "CANNON", "Splash burst"),
+            ((panel.x + 24, panel.y + 396, 88, 50), (65, 173, 89),  "ARCHER", "Rapid shots"),
+            ((panel.x + 116, panel.y + 396, 88, 50), (147, 93, 232), "MAGE",   "Slow control"),
+            ((panel.x + 208, panel.y + 396, 88, 50), (218, 109, 32), "CANNON", "Splash burst"),
         ]
         feat_title_font = pygame.font.SysFont("georgia", 13, bold=True)
         feat_desc_font  = pygame.font.SysFont("georgia", 10, bold=False)
@@ -896,8 +896,8 @@ class Game:
             self.screen.blit(title_surf, (rect.x + 18, rect.y + 8))
             self.screen.blit(desc_surf,  (rect.x + 18, rect.y + 28))
 
-        self.home_start_btn = pygame.Rect(panel.x + 24, panel.y + 492, 270, 46)
-        self.home_quit_btn  = pygame.Rect(panel.x + 82, panel.y + 544, 128, 24)
+        self.home_start_btn = pygame.Rect(panel.x + 24, panel.y + 458, 270, 46)
+        self.home_quit_btn  = pygame.Rect(panel.x + 82, panel.y + 510, 128, 24)
 
         self._draw_home_button(
             self.home_start_btn,
@@ -1327,6 +1327,18 @@ class Game:
         pygame.draw.rect(self.screen, (247, 222, 118), accent, 2, border_radius=18)
         pygame.draw.rect(self.screen, (246, 214, 97), self.start_wave_btn, 3, border_radius=16)
         pygame.draw.rect(self.screen, (249, 229, 145), inner, 1, border_radius=14)
+
+        # Pulsing corner diamond accents
+        import math as _m
+        now = pygame.time.get_ticks()
+        pulse = 0.55 + 0.45 * abs(_m.sin(now / 420.0))
+        dia_a = int(200 * pulse)
+        dia_surf = pygame.Surface((14, 14), pygame.SRCALPHA)
+        pygame.draw.polygon(dia_surf, (255, 222, 80, dia_a), [(7, 0), (14, 7), (7, 14), (0, 7)])
+        btn = self.start_wave_btn
+        for dx, dy in ((-20, 0), (btn.width + 6, 0)):
+            self.screen.blit(dia_surf, (btn.x + dx, btn.centery - 7))
+
         text = self.font.render(label_text, True, (38, 28, 10))
         sub = self.font_small.render("Release the next enemy march", True, (101, 69, 19))
         self.screen.blit(
@@ -1358,23 +1370,32 @@ class Game:
 
         font = pygame.font.SysFont("verdana", 11, bold=True)
         btn = self.start_wave_btn
-        preview_y = btn.y - 30
+        total_w = self._preview_total_width(counts, font)
+        pill_w = total_w + 32
+        pill_h = 22
+        pill_x = btn.centerx - pill_w // 2
+        pill_y = btn.y - 32
 
-        label = font.render("NEXT WAVE:", True, (180, 170, 130))
-        x = btn.centerx - self._preview_total_width(counts, font) // 2
-        self.screen.blit(label, (x, preview_y))
+        # Dark pill background
+        pygame.draw.rect(self.screen, (6, 9, 18), (pill_x + 2, pill_y + 3, pill_w, pill_h), border_radius=11)
+        pygame.draw.rect(self.screen, (20, 28, 48), (pill_x, pill_y, pill_w, pill_h), border_radius=11)
+        pygame.draw.rect(self.screen, (78, 93, 128), (pill_x, pill_y, pill_w, pill_h), 1, border_radius=11)
+
+        x = pill_x + 14
+        label = font.render("NEXT:", True, (188, 176, 132))
+        self.screen.blit(label, (x, pill_y + 5))
         x += label.get_width() + 8
 
         for enemy_name, count in counts.items():
             short, color = self._ENEMY_PREVIEW.get(enemy_name, (enemy_name[:3], (200, 200, 200)))
-            surf = font.render(f"{short}\u00d7{count}", True, color)
+            surf   = font.render(f"{short}\u00d7{count}", True, color)
             shadow = font.render(f"{short}\u00d7{count}", True, (0, 0, 0))
-            self.screen.blit(shadow, (x + 1, preview_y + 1))
-            self.screen.blit(surf, (x, preview_y))
+            self.screen.blit(shadow, (x + 1, pill_y + 6))
+            self.screen.blit(surf,   (x,     pill_y + 5))
             x += surf.get_width() + 10
 
     def _preview_total_width(self, counts, font):
-        label_w = font.size("NEXT WAVE:")[0] + 8
+        label_w = font.size("NEXT:")[0] + 8
         items_w = sum(
             font.size(f"{self._ENEMY_PREVIEW.get(n, (n[:3], None))[0]}\u00d7{c}")[0] + 10
             for n, c in counts.items()
@@ -1547,26 +1568,46 @@ class Game:
 
         title_font = pygame.font.SysFont("georgia", 60, bold=True)
         title = title_font.render("VICTORY!", True, (255, 215, 0))
-        self.screen.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 16))
+        tx = panel.centerx - title.get_width() // 2
+        for dx, dy, a in ((4, 5, 150), (2, 3, 80)):
+            sh = title_font.render("VICTORY!", True, (90, 65, 0))
+            sh.set_alpha(a)
+            self.screen.blit(sh, (tx + dx, panel.y + 16 + dy))
+        self.screen.blit(title, (tx, panel.y + 16))
 
         sub_font = pygame.font.SysFont("georgia", 16)
         subtitle = sub_font.render("You defended the kingdom!", True, (200, 190, 160))
         self.screen.blit(subtitle, (panel.centerx - subtitle.get_width() // 2, panel.y + 88))
 
-        pygame.draw.line(self.screen, (212, 175, 55),
-                         (panel.x + 30, panel.y + 114), (panel.right - 30, panel.y + 114), 1)
+        # Diamond separator
+        sep_y  = panel.y + 116
+        sep_lx = panel.x + 30
+        sep_rx = panel.right - 30
+        sep_cx = panel.centerx
+        pygame.draw.line(self.screen, (160, 130, 40), (sep_lx, sep_y), (sep_cx - 14, sep_y), 1)
+        pygame.draw.line(self.screen, (160, 130, 40), (sep_cx + 14, sep_y), (sep_rx, sep_y), 1)
+        pygame.draw.polygon(self.screen, (212, 175, 55), [
+            (sep_cx, sep_y - 6), (sep_cx + 6, sep_y), (sep_cx, sep_y + 6), (sep_cx - 6, sep_y)])
+        for ox in (-22, 22):
+            pygame.draw.polygon(self.screen, (160, 130, 45), [
+                (sep_cx + ox, sep_y - 4), (sep_cx + ox + 4, sep_y),
+                (sep_cx + ox, sep_y + 4), (sep_cx + ox - 4, sep_y)])
 
         total_kills = sum(d["enemies_defeated"] for d in self.stats_tracker.history)
-        stat_font = pygame.font.SysFont("georgia", 19, bold=True)
+        stat_font = pygame.font.SysFont("georgia", 18, bold=True)
         stats_rows = [
             ("Waves Survived",    str(self.current_wave)),
             ("Enemies Defeated",  str(total_kills)),
             ("Gold Earned",       str(self.total_gold_earned)),
         ]
         for i, (label, value) in enumerate(stats_rows):
-            y = panel.y + 128 + i * 40
-            lbl_s = stat_font.render(label, True, (180, 172, 148))
-            val_s = stat_font.render(value, True, (245, 232, 188))
+            y = panel.y + 130 + i * 40
+            row_bg = pygame.Rect(panel.x + 24, y - 3, panel_w - 48, 30)
+            bg_color = (24, 32, 52) if i % 2 == 0 else (18, 24, 40)
+            pygame.draw.rect(self.screen, bg_color, row_bg, border_radius=8)
+            pygame.draw.rect(self.screen, (55, 68, 98), row_bg, 1, border_radius=8)
+            lbl_s = stat_font.render(label, True, (172, 164, 140))
+            val_s = stat_font.render(value, True, (248, 234, 190))
             self.screen.blit(lbl_s, (panel.x + 40, y))
             self.screen.blit(val_s, (panel.right - val_s.get_width() - 40, y))
 
@@ -1593,25 +1634,45 @@ class Game:
 
         title_font = pygame.font.SysFont("georgia", 58, bold=True)
         title = title_font.render("GAME OVER", True, (220, 55, 55))
-        self.screen.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 18))
+        tx = panel.centerx - title.get_width() // 2
+        for dx, dy, a in ((4, 5, 150), (2, 3, 80)):
+            sh = title_font.render("GAME OVER", True, (60, 10, 10))
+            sh.set_alpha(a)
+            self.screen.blit(sh, (tx + dx, panel.y + 18 + dy))
+        self.screen.blit(title, (tx, panel.y + 18))
 
         sub_font = pygame.font.SysFont("georgia", 16)
         subtitle = sub_font.render("The castle has fallen.", True, (200, 170, 160))
         self.screen.blit(subtitle, (panel.centerx - subtitle.get_width() // 2, panel.y + 84))
 
-        pygame.draw.line(self.screen, (192, 48, 48),
-                         (panel.x + 30, panel.y + 110), (panel.right - 30, panel.y + 110), 1)
+        # Diamond separator (red tones)
+        sep_y  = panel.y + 112
+        sep_lx = panel.x + 30
+        sep_rx = panel.right - 30
+        sep_cx = panel.centerx
+        pygame.draw.line(self.screen, (140, 48, 48), (sep_lx, sep_y), (sep_cx - 14, sep_y), 1)
+        pygame.draw.line(self.screen, (140, 48, 48), (sep_cx + 14, sep_y), (sep_rx, sep_y), 1)
+        pygame.draw.polygon(self.screen, (192, 60, 60), [
+            (sep_cx, sep_y - 6), (sep_cx + 6, sep_y), (sep_cx, sep_y + 6), (sep_cx - 6, sep_y)])
+        for ox in (-22, 22):
+            pygame.draw.polygon(self.screen, (140, 44, 44), [
+                (sep_cx + ox, sep_y - 4), (sep_cx + ox + 4, sep_y),
+                (sep_cx + ox, sep_y + 4), (sep_cx + ox - 4, sep_y)])
 
         total_kills = sum(d["enemies_defeated"] for d in self.stats_tracker.history)
-        stat_font = pygame.font.SysFont("georgia", 19, bold=True)
+        stat_font = pygame.font.SysFont("georgia", 18, bold=True)
         stats_rows = [
             ("Wave Reached",     str(self.current_wave)),
             ("Enemies Defeated", str(total_kills)),
         ]
         for i, (label, value) in enumerate(stats_rows):
-            y = panel.y + 124 + i * 40
-            lbl_s = stat_font.render(label, True, (180, 165, 155))
-            val_s = stat_font.render(value, True, (245, 220, 200))
+            y = panel.y + 126 + i * 40
+            row_bg = pygame.Rect(panel.x + 24, y - 3, panel_w - 48, 30)
+            bg_color = (28, 20, 20) if i % 2 == 0 else (22, 16, 16)
+            pygame.draw.rect(self.screen, bg_color, row_bg, border_radius=8)
+            pygame.draw.rect(self.screen, (80, 44, 44), row_bg, 1, border_radius=8)
+            lbl_s = stat_font.render(label, True, (180, 158, 148))
+            val_s = stat_font.render(value, True, (248, 220, 200))
             self.screen.blit(lbl_s, (panel.x + 40, y))
             self.screen.blit(val_s, (panel.right - val_s.get_width() - 40, y))
 
