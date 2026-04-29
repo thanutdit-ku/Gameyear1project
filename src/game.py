@@ -737,59 +737,132 @@ class Game:
             pygame.draw.circle(glow, color, (radius, radius), radius)
             surface.blit(glow, (center[0] - radius, center[1] - radius))
 
+        # Static background stars
+        import random as _rng
+        rng = _rng.Random(42)
+        for _ in range(60):
+            sx = rng.randint(380, 790)
+            sy = rng.randint(10, 590)
+            sr = rng.choice([1, 1, 1, 2])
+            sa = rng.randint(40, 130)
+            sc = rng.choice([(229,183,57),(160,200,255),(255,255,255)])
+            gs = pygame.Surface((sr*2+2, sr*2+2), pygame.SRCALPHA)
+            pygame.draw.circle(gs, (*sc, sa), (sr+1, sr+1), sr)
+            surface.blit(gs, (sx-sr, sy-sr))
+
         return surface
+
+    def _draw_home_sparkles(self):
+        """Animated twinkling stars drifting slowly upward."""
+        now = pygame.time.get_ticks()
+        for i in range(28):
+            seed   = i * 6271
+            x      = (seed * 137 % 400) + 382
+            period = 4500 + (seed % 2500)
+            phase  = (now + seed * 53) % period
+            t      = phase / period
+            y      = ((seed * 251 % 480) + 50 - int(t * 90)) % 540 + 20
+            fade   = 4.0 * t * (1.0 - t)
+            a      = int(220 * fade)
+            r      = 1 + (seed % 2)
+            colors = [(229,183,57),(160,200,255),(255,255,255),(200,160,255)]
+            c      = colors[seed % 4]
+            s = pygame.Surface((r*2+2, r*2+2), pygame.SRCALPHA)
+            pygame.draw.circle(s, (*c, a), (r+1, r+1), r)
+            self.screen.blit(s, (x-r, y-r))
 
     def _draw_home_screen(self):
         self.screen.blit(self.home_backdrop, (0, 0))
+        self._draw_home_sparkles()
 
-        pulse = (pygame.time.get_ticks() % 2000) / 2000.0
+        pulse   = (pygame.time.get_ticks() % 2000) / 2000.0
         shimmer = 0.5 + 0.5 * abs(1 - pulse * 2)
 
         panel = pygame.Rect(42, 24, 320, 552)
         panel_shadow = panel.move(10, 14)
         pygame.draw.rect(self.screen, (4, 7, 14), panel_shadow, border_radius=32)
         pygame.draw.rect(self.screen, (15, 21, 36), panel, border_radius=32)
-        pygame.draw.rect(self.screen, (63, 78, 112), panel, 2, border_radius=32)
+        # Animated border that pulses gold ↔ blue
+        border_r = int(63  + 30 * shimmer)
+        border_g = int(78  + 20 * shimmer)
+        border_b = int(112 + 40 * shimmer)
+        pygame.draw.rect(self.screen, (border_r, border_g, border_b), panel, 2, border_radius=32)
+        # Inner highlight line
+        pygame.draw.rect(self.screen, (40, 50, 75), panel.inflate(-8, -8), 1, border_radius=28)
 
+        # ── Crest ────────────────────────────────────────────────────
         crest_outer = pygame.Rect(panel.x + 24, panel.y + 24, 78, 78)
         crest_inner = crest_outer.inflate(-10, -10)
+
+        # Pulsing outer glow
+        glow_r = int(52 + 10 * shimmer)
+        glow_surf = pygame.Surface((glow_r*2, glow_r*2), pygame.SRCALPHA)
+        glow_a = int(80 * shimmer)
+        pygame.draw.circle(glow_surf, (214, 160, 57, glow_a), (glow_r, glow_r), glow_r)
+        self.screen.blit(glow_surf, (crest_outer.centerx - glow_r, crest_outer.centery - glow_r))
+
         pygame.draw.ellipse(self.screen, (181, 134, 57), crest_outer)
         pygame.draw.ellipse(self.screen, (247, 213, 126), crest_inner)
         pygame.draw.circle(self.screen, (52, 38, 17), crest_inner.center, 18)
-        pygame.draw.polygon(
-            self.screen,
-            (88, 63, 25),
-            [
-                (crest_inner.centerx, crest_inner.centery - 26),
-                (crest_inner.centerx + 24, crest_inner.centery + 8),
-                (crest_inner.centerx, crest_inner.centery + 26),
-                (crest_inner.centerx - 24, crest_inner.centery + 8),
-            ],
-        )
+        pygame.draw.polygon(self.screen, (88, 63, 25), [
+            (crest_inner.centerx,      crest_inner.centery - 26),
+            (crest_inner.centerx + 24, crest_inner.centery + 8),
+            (crest_inner.centerx,      crest_inner.centery + 26),
+            (crest_inner.centerx - 24, crest_inner.centery + 8),
+        ])
+        # Crest shine dot
+        pygame.draw.circle(self.screen, (255, 240, 180), (crest_inner.centerx + 6, crest_inner.centery - 10), 3)
 
+        # ── Eyebrow tag ───────────────────────────────────────────────
         eyebrow = pygame.Rect(panel.x + 24, panel.y + 120, 252, 30)
-        pygame.draw.rect(self.screen, (32, 40, 63), eyebrow, border_radius=13)
+        pygame.draw.rect(self.screen, (28, 36, 58), eyebrow, border_radius=13)
         pygame.draw.rect(self.screen, (95, 111, 148), eyebrow, 1, border_radius=13)
-        eyebrow_text = pygame.font.SysFont("georgia", 14, bold=True).render(
-            "TACTICAL DEFENSE CAMPAIGN",
-            True,
-            (212, 196, 150),
-        )
-        self.screen.blit(
-            eyebrow_text,
-            (eyebrow.centerx - eyebrow_text.get_width() // 2, eyebrow.y + 7),
-        )
+        # Small diamond accents on sides
+        for ex in (eyebrow.x + 10, eyebrow.right - 10):
+            pygame.draw.polygon(self.screen, (180, 148, 70), [
+                (ex, eyebrow.centery - 5), (ex+4, eyebrow.centery),
+                (ex, eyebrow.centery + 5), (ex-4, eyebrow.centery),
+            ])
+        eyebrow_text = pygame.font.SysFont("georgia", 13, bold=True).render(
+            "TACTICAL DEFENSE CAMPAIGN", True, (212, 196, 150))
+        self.screen.blit(eyebrow_text,
+            (eyebrow.centerx - eyebrow_text.get_width() // 2, eyebrow.y + 7))
 
-        title_font = pygame.font.SysFont("georgia", 32, bold=True)
-        title_shadow_color = (8, 12, 22)
-        for line, y_off in (("Kingdom's", 182), ("Last Stand", 222)):
-            shadow = title_font.render(line, True, title_shadow_color)
-            self.screen.blit(shadow, (panel.x + 25, panel.y + y_off + 2))
-            surf = title_font.render(line, True, (245, 238, 224))
+        # ── Title (gold, multi-layer shadow) ──────────────────────────
+        title_font = pygame.font.SysFont("georgia", 34, bold=True)
+        title_color = (248, 228, 160)   # warm gold-white
+        for line, y_off in (("Kingdom's", 160), ("Last Stand", 202)):
+            # Deep shadow
+            for dx, dy, a in ((3, 4, 160), (2, 3, 100), (1, 1, 60)):
+                sh = title_font.render(line, True, (6, 9, 18))
+                sh.set_alpha(a)
+                self.screen.blit(sh, (panel.x + 24 + dx, panel.y + y_off + dy))
+            surf = title_font.render(line, True, title_color)
             self.screen.blit(surf, (panel.x + 24, panel.y + y_off))
 
-        accent_line = pygame.Rect(panel.x + 26, panel.y + 276, 118, 4)
-        pygame.draw.rect(self.screen, (212, 165, 74), accent_line, border_radius=2)
+        # ── Decorative diamond separator ──────────────────────────────
+        sep_y  = panel.y + 254
+        sep_lx = panel.x + 26
+        sep_rx = panel.x + 300
+        sep_cx = (sep_lx + sep_rx) // 2
+        line_clr = (160, 124, 52)
+        pygame.draw.line(self.screen, line_clr, (sep_lx, sep_y), (sep_cx - 14, sep_y), 1)
+        pygame.draw.line(self.screen, line_clr, (sep_cx + 14, sep_y), (sep_rx, sep_y), 1)
+        # Center diamond
+        pygame.draw.polygon(self.screen, (229, 183, 57), [
+            (sep_cx,      sep_y - 6),
+            (sep_cx + 6,  sep_y),
+            (sep_cx,      sep_y + 6),
+            (sep_cx - 6,  sep_y),
+        ])
+        # Side small diamonds
+        for ox in (-22, 22):
+            pygame.draw.polygon(self.screen, (180, 138, 58), [
+                (sep_cx + ox,     sep_y - 4),
+                (sep_cx + ox + 4, sep_y),
+                (sep_cx + ox,     sep_y + 4),
+                (sep_cx + ox - 4, sep_y),
+            ])
 
         body_font = pygame.font.SysFont("georgia", 16, bold=False)
         body_lines = [
