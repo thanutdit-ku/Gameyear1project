@@ -136,6 +136,7 @@ class Game:
     STATE_HOME      = "home"
     STATE_PREP      = "prep"
     STATE_WAVE      = "wave"
+    STATE_HOW_TO_PLAY = "how_to_play"
     STATE_GAME_OVER = "game_over"
     STATE_VICTORY   = "victory"
 
@@ -198,8 +199,13 @@ class Game:
         self.home_name_input_active = True
         self.home_name_error_until = 0
         self.home_start_btn = pygame.Rect(0, 0, 0, 0)
+        self.home_help_btn = pygame.Rect(0, 0, 0, 0)
         self.home_quit_btn = pygame.Rect(0, 0, 0, 0)
         self.home_map_buttons = []
+        self.how_to_play_back_btn = pygame.Rect(0, 0, 0, 0)
+        self.how_to_play_prev_btn = pygame.Rect(0, 0, 0, 0)
+        self.how_to_play_next_btn = pygame.Rect(0, 0, 0, 0)
+        self.how_to_play_page = 0
         self.pause_btn     = pygame.Rect(GAME_W + 24, SCREEN_H - 162, PANEL_WIDTH - 48, 32)
         self.quit_game_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 120, PANEL_WIDTH - 48, 32)
         self.static_battlefield = self._build_static_battlefield()
@@ -269,6 +275,8 @@ class Game:
     def game_state(self):
         if self.state == self.STATE_HOME:
             return "menu"
+        if self.state == self.STATE_HOW_TO_PLAY:
+            return "how_to_play"
         if self.state in (self.STATE_PREP, self.STATE_WAVE):
             return "playing"
         if self.state == self.STATE_VICTORY:
@@ -311,6 +319,9 @@ class Game:
                 if self.state == self.STATE_HOME:
                     self._handle_home_keydown(event, allow_key_text=not has_text_input)
                     continue
+                if self.state == self.STATE_HOW_TO_PLAY:
+                    self._handle_how_to_play_keydown(event)
+                    continue
                 if event.key == pygame.K_ESCAPE:
                     self.selected_tower_type = None
                     self.sell_mode = False
@@ -333,6 +344,10 @@ class Game:
     def _handle_home_keydown(self, event, allow_key_text=False):
         if event.key == pygame.K_RETURN:
             self._try_start_campaign()
+        elif event.key == pygame.K_F1:
+            self.how_to_play_page = 0
+            self.state = self.STATE_HOW_TO_PLAY
+            self.home_name_input_active = False
         elif event.key == pygame.K_ESCAPE:
             pygame.quit()
             sys.exit()
@@ -342,6 +357,16 @@ class Game:
             self.home_name_input_active = not self.home_name_input_active
         elif allow_key_text and self.home_name_input_active and event.unicode and self._is_name_character(event.unicode):
             self._append_name_text(event.unicode)
+
+    def _handle_how_to_play_keydown(self, event):
+        max_page = len(self._get_how_to_play_pages()) - 1
+        if event.key in (pygame.K_ESCAPE, pygame.K_h, pygame.K_F1):
+            self.state = self.STATE_HOME
+            self.home_name_input_active = True
+        elif event.key in (pygame.K_RIGHT, pygame.K_d, pygame.K_SPACE, pygame.K_RETURN):
+            self.how_to_play_page = min(max_page, self.how_to_play_page + 1)
+        elif event.key in (pygame.K_LEFT, pygame.K_a, pygame.K_BACKSPACE):
+            self.how_to_play_page = max(0, self.how_to_play_page - 1)
 
     def _append_name_text(self, text):
         if not self._is_name_character(text):
@@ -402,11 +427,26 @@ class Game:
                 self.home_name_input_active = False
             elif self.home_start_btn.collidepoint(pos):
                 self._try_start_campaign()
+            elif self.home_help_btn.collidepoint(pos):
+                self.how_to_play_page = 0
+                self.state = self.STATE_HOW_TO_PLAY
+                self.home_name_input_active = False
             elif self.home_quit_btn.collidepoint(pos):
                 pygame.quit()
                 sys.exit()
             else:
                 self.home_name_input_active = False
+            return
+
+        if self.state == self.STATE_HOW_TO_PLAY:
+            if self.how_to_play_back_btn.collidepoint(pos):
+                self.state = self.STATE_HOME
+                self.home_name_input_active = True
+            elif self.how_to_play_prev_btn.collidepoint(pos):
+                self.how_to_play_page = max(0, self.how_to_play_page - 1)
+            elif self.how_to_play_next_btn.collidepoint(pos):
+                max_page = len(self._get_how_to_play_pages()) - 1
+                self.how_to_play_page = min(max_page, self.how_to_play_page + 1)
             return
 
         if self.state in (self.STATE_GAME_OVER, self.STATE_VICTORY):
@@ -524,7 +564,7 @@ class Game:
     # ------------------------------------------------------------------
 
     def update(self, dt):
-        if self.state == self.STATE_HOME:
+        if self.state in (self.STATE_HOME, self.STATE_HOW_TO_PLAY):
             return
 
         # Always tick flashes so they fade even in prep/paused state
@@ -542,6 +582,7 @@ class Game:
         new_enemy = self.wave.update(dt)
         if new_enemy:
             self.enemies.append(new_enemy)
+            self.stats_tracker.record_enemy_encountered()
 
         # 2. Move enemies; collect those that reached the castle
         reached_end = []
@@ -653,14 +694,23 @@ class Game:
 
         if self.check_game_over():
             self.state = self.STATE_GAME_OVER
+            self._save_session_summary("lose")
         elif self.current_wave >= MAX_WAVES:
             self.state = self.STATE_VICTORY
+            self._save_session_summary("win")
         else:
             self.state = self.STATE_PREP
             self._queue_next_wave()
 
     def check_game_over(self):
         return self.castle_hp <= 0
+
+    def _save_session_summary(self, result):
+        self.stats_tracker.save_session_summary(
+            waves_played=self.current_wave,
+            castle_hp_lost=100 - self.castle_hp,
+            result=result,
+        )
 
     # ------------------------------------------------------------------
     # Draw
@@ -669,6 +719,11 @@ class Game:
     def draw(self):
         if self.state == self.STATE_HOME:
             self._draw_home_screen()
+            self._present_frame()
+            return
+
+        if self.state == self.STATE_HOW_TO_PLAY:
+            self._draw_how_to_play_screen()
             self._present_frame()
             return
 
@@ -896,8 +951,9 @@ class Game:
             self.screen.blit(title_surf, (rect.x + 18, rect.y + 8))
             self.screen.blit(desc_surf,  (rect.x + 18, rect.y + 28))
 
-        self.home_start_btn = pygame.Rect(panel.x + 24, panel.y + 458, 270, 46)
-        self.home_quit_btn  = pygame.Rect(panel.x + 82, panel.y + 510, 128, 24)
+        self.home_start_btn = pygame.Rect(panel.x + 24, panel.y + 454, 270, 44)
+        self.home_help_btn = pygame.Rect(panel.x + 34, panel.y + 510, 122, 26)
+        self.home_quit_btn  = pygame.Rect(panel.x + 164, panel.y + 510, 122, 26)
 
         self._draw_home_button(
             self.home_start_btn,
@@ -907,6 +963,15 @@ class Game:
             (184, 117, 19),
             hover=self.home_start_btn.collidepoint(self._get_mouse_pos()),
             glow_strength=shimmer,
+        )
+        self._draw_home_button(
+            self.home_help_btn,
+            "How to Play",
+            "Open guide",
+            (54, 72, 108),
+            (26, 36, 58),
+            hover=self.home_help_btn.collidepoint(self._get_mouse_pos()),
+            glow_strength=0.0,
         )
         self._draw_home_button(
             self.home_quit_btn,
@@ -948,6 +1013,356 @@ class Game:
             )
             self.home_map_buttons.append((map_index, rect))
             self._draw_home_map_card(rect, map_index, map_data)
+
+    def _draw_how_to_play_screen(self):
+        self.screen.blit(self.home_backdrop, (0, 0))
+        self._draw_home_sparkles()
+        mouse_pos = self._get_mouse_pos()
+
+        pages = self._get_how_to_play_pages()
+        self.how_to_play_page = max(0, min(self.how_to_play_page, len(pages) - 1))
+        page = pages[self.how_to_play_page]
+
+        panel = pygame.Rect(42, 30, 716, 540)
+        pygame.draw.rect(self.screen, (4, 7, 14), panel.move(10, 14), border_radius=30)
+        pygame.draw.rect(self.screen, (15, 21, 36), panel, border_radius=30)
+        pygame.draw.rect(self.screen, (82, 101, 140), panel, 2, border_radius=30)
+        pygame.draw.rect(self.screen, (42, 54, 82), panel.inflate(-10, -10), 1, border_radius=25)
+
+        tag = pygame.Rect(panel.x + 30, panel.y + 26, 112, 28)
+        pygame.draw.rect(self.screen, (35, 45, 68), tag, border_radius=14)
+        pygame.draw.rect(self.screen, (96, 112, 146), tag, 1, border_radius=14)
+        tag_surf = pygame.font.SysFont("georgia", 13, bold=True).render("QUICK GUIDE", True, (218, 201, 154))
+        self.screen.blit(tag_surf, (tag.centerx - tag_surf.get_width() // 2, tag.y + 7))
+
+        title = pygame.font.SysFont("georgia", 40, bold=True).render(page["title"], True, (248, 228, 160))
+        self.screen.blit(title, (panel.x + 30, panel.y + 68))
+
+        subtitle = pygame.font.SysFont("georgia", 16, bold=True).render(page["subtitle"], True, (166, 178, 202))
+        self.screen.blit(subtitle, (panel.x + 34, panel.y + 116))
+
+        visual_rect = pygame.Rect(panel.x + 34, panel.y + 158, 408, 286)
+        info_rect = pygame.Rect(panel.x + 466, panel.y + 158, 224, 286)
+        self._draw_how_to_play_visual(visual_rect, page["kind"])
+        self._draw_how_to_play_notes(info_rect, page["tips"], page["accent"])
+
+        self._draw_how_to_play_progress(panel, len(pages))
+
+        self.how_to_play_back_btn = pygame.Rect(panel.x + 30, panel.bottom - 60, 150, 38)
+        self.how_to_play_prev_btn = pygame.Rect(panel.centerx - 112, panel.bottom - 60, 104, 38)
+        self.how_to_play_next_btn = pygame.Rect(panel.centerx + 8, panel.bottom - 60, 150, 38)
+
+        self._draw_help_nav_button(self.how_to_play_back_btn, "Menu", mouse_pos, enabled=True)
+        self._draw_help_nav_button(self.how_to_play_prev_btn, "Prev", mouse_pos, enabled=self.how_to_play_page > 0)
+        self._draw_help_nav_button(
+            self.how_to_play_next_btn,
+            "Next",
+            mouse_pos,
+            enabled=self.how_to_play_page < len(pages) - 1,
+            primary=True,
+        )
+
+        hint = pygame.font.SysFont("georgia", 12, bold=True).render(
+            "Left/Right or Space to flip pages. ESC returns to menu.",
+            True,
+            (126, 138, 162),
+        )
+        self.screen.blit(hint, (panel.right - hint.get_width() - 30, panel.bottom - 86))
+
+    def _get_how_to_play_pages(self):
+        return [
+            {
+                "kind": "goal",
+                "title": "Hold the Road",
+                "subtitle": "Enemies march along the path. Your castle is the final line.",
+                "accent": (229, 183, 57),
+                "tips": [
+                    "Stop enemies before they reach the gate.",
+                    "Each leak costs castle HP.",
+                    "Survive all 10 waves to win.",
+                ],
+            },
+            {
+                "kind": "build",
+                "title": "Build Smart",
+                "subtitle": "Spend gold on grass tiles and leave the road open.",
+                "accent": (82, 190, 120),
+                "tips": [
+                    "Choose a tower from the Armory.",
+                    "Green tiles are valid placements.",
+                    "Red tiles mean blocked or too expensive.",
+                ],
+            },
+            {
+                "kind": "towers",
+                "title": "Pick a Role",
+                "subtitle": "Mix tower types so waves cannot exploit one weakness.",
+                "accent": (147, 118, 232),
+                "tips": [
+                    "Archer: quick single-target shots.",
+                    "Mage: slows enemies with magic.",
+                    "Cannon: splash damage for groups.",
+                ],
+            },
+            {
+                "kind": "controls",
+                "title": "Fast Controls",
+                "subtitle": "Use short keys when the wave gets crowded.",
+                "accent": (118, 190, 245),
+                "tips": [
+                    "Left click selects and places towers.",
+                    "Right click changes tower targeting.",
+                    "F sells, P pauses, ESC clears selection.",
+                ],
+            },
+        ]
+
+    def _draw_how_to_play_progress(self, panel, total_pages):
+        font = pygame.font.SysFont("georgia", 13, bold=True)
+        label = font.render(f"{self.how_to_play_page + 1} / {total_pages}", True, (218, 201, 154))
+        self.screen.blit(label, (panel.right - label.get_width() - 38, panel.y + 34))
+
+        dot_start = panel.right - 38 - total_pages * 18 - label.get_width() - 18
+        for index in range(total_pages):
+            center = (dot_start + index * 18, panel.y + 42)
+            selected = index == self.how_to_play_page
+            color = (229, 183, 57) if selected else (63, 78, 108)
+            radius = 6 if selected else 4
+            pygame.draw.circle(self.screen, color, center, radius)
+            if selected:
+                pygame.draw.circle(self.screen, (255, 235, 170), center, radius, 1)
+
+    def _draw_help_nav_button(self, rect, text, mouse_pos, enabled=True, primary=False):
+        hover = enabled and rect.collidepoint(mouse_pos)
+        if not enabled:
+            top, bottom, border, text_color = (31, 36, 50), (21, 25, 36), (52, 60, 78), (91, 101, 124)
+        elif primary:
+            top = (241, 188, 53) if hover else (226, 174, 42)
+            bottom, border, text_color = (166, 105, 18), (247, 222, 118), (38, 28, 10)
+        else:
+            top = (66, 82, 118) if hover else (48, 61, 91)
+            bottom, border, text_color = (28, 38, 62), (107, 126, 164), (236, 239, 246)
+
+        pygame.draw.rect(self.screen, (6, 9, 16), rect.move(0, 5), border_radius=14)
+        for offset in range(rect.height):
+            t = offset / max(rect.height, 1)
+            color = tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3))
+            pygame.draw.line(self.screen, color, (rect.left, rect.top + offset), (rect.right, rect.top + offset))
+        pygame.draw.rect(self.screen, border, rect, 2, border_radius=14)
+        surf = pygame.font.SysFont("georgia", 16, bold=True).render(text, True, text_color)
+        self.screen.blit(surf, (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2 - 1))
+
+    def _draw_how_to_play_notes(self, rect, tips, accent):
+        pygame.draw.rect(self.screen, (7, 10, 18), rect.move(0, 6), border_radius=22)
+        pygame.draw.rect(self.screen, (21, 29, 48), rect, border_radius=22)
+        pygame.draw.rect(self.screen, (72, 88, 122), rect, 1, border_radius=22)
+
+        title = pygame.font.SysFont("georgia", 18, bold=True).render("Remember", True, (244, 238, 228))
+        self.screen.blit(title, (rect.x + 22, rect.y + 20))
+        pygame.draw.rect(self.screen, accent, (rect.x + 22, rect.y + 48, rect.width - 44, 4), border_radius=3)
+
+        body_font = pygame.font.SysFont("georgia", 14, bold=True)
+        for index, tip in enumerate(tips):
+            y = rect.y + 78 + index * 58
+            badge = pygame.Rect(rect.x + 18, y - 4, 28, 28)
+            pygame.draw.rect(self.screen, (34, 43, 64), badge, border_radius=10)
+            pygame.draw.rect(self.screen, accent, badge, 2, border_radius=10)
+            num = body_font.render(str(index + 1), True, (248, 228, 160))
+            self.screen.blit(num, (badge.centerx - num.get_width() // 2, badge.y + 5))
+            for line_index, line in enumerate(self._wrap_text(tip, body_font, rect.width - 64)):
+                surf = body_font.render(line, True, (166, 178, 202))
+                self.screen.blit(surf, (rect.x + 54, y + line_index * 17))
+
+    def _wrap_text(self, text, font, max_width):
+        words = text.split()
+        lines = []
+        current = ""
+        for word in words:
+            candidate = word if not current else f"{current} {word}"
+            if font.size(candidate)[0] <= max_width:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        return lines
+
+    def _draw_how_to_play_visual(self, rect, kind):
+        pygame.draw.rect(self.screen, (7, 10, 18), rect.move(0, 7), border_radius=24)
+        pygame.draw.rect(self.screen, (23, 31, 50), rect, border_radius=24)
+        pygame.draw.rect(self.screen, (83, 101, 136), rect, 2, border_radius=24)
+
+        inner = rect.inflate(-34, -34)
+        viewport = pygame.Surface(inner.size, pygame.SRCALPHA)
+        old_screen = self.screen
+        self.screen = viewport
+        local_rect = viewport.get_rect()
+        if kind == "goal":
+            self._draw_goal_guide_visual(local_rect)
+        elif kind == "build":
+            self._draw_build_guide_visual(local_rect)
+        elif kind == "towers":
+            self._draw_towers_guide_visual(local_rect)
+        else:
+            self._draw_controls_guide_visual(local_rect)
+        self.screen = old_screen
+
+        mask = pygame.Surface(inner.size, pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=18)
+        viewport.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        self.screen.blit(viewport, inner.topleft)
+        pygame.draw.rect(self.screen, (42, 55, 82), inner, 1, border_radius=18)
+
+    def _draw_goal_guide_visual(self, rect):
+        self.screen.fill((0, 0, 0, 0))
+        pygame.draw.rect(self.screen, (42, 91, 54), rect, border_radius=18)
+        for row in range(0, rect.height, 32):
+            for col in range(0, rect.width, 32):
+                color = (50, 106, 61) if (row // 32 + col // 32) % 2 == 0 else (37, 83, 50)
+                pygame.draw.rect(self.screen, color, (rect.x + col, rect.y + row, 32, 32))
+
+        top_pad = 18
+        bottom_pad = 24
+        points = [
+            (rect.x + 14, rect.bottom - bottom_pad - 48),
+            (rect.x + 98, rect.bottom - bottom_pad - 48),
+            (rect.x + 98, rect.y + top_pad + 86),
+            (rect.x + 218, rect.y + top_pad + 86),
+            (rect.x + 218, rect.y + top_pad + 146),
+            (rect.right - 42, rect.y + top_pad + 146),
+        ]
+        pygame.draw.lines(self.screen, (151, 94, 36), False, points, 38)
+        pygame.draw.lines(self.screen, (232, 198, 120), False, points, 28)
+        pygame.draw.lines(self.screen, (244, 221, 159), False, points, 12)
+
+        for i, pos in enumerate(((rect.x + 66, rect.bottom - bottom_pad - 48), (rect.x + 146, rect.y + top_pad + 86), (rect.x + 268, rect.y + top_pad + 146))):
+            self._draw_tiny_enemy(pos, i)
+        self._draw_mini_castle((rect.right - 36, rect.y + top_pad + 146))
+
+        banner = pygame.Rect(rect.x + 18, rect.y + 18, 152, 34)
+        pygame.draw.rect(self.screen, (14, 20, 36), banner, border_radius=14)
+        label = pygame.font.SysFont("georgia", 16, bold=True).render("Protect the gate", True, (248, 228, 160))
+        self.screen.blit(label, (banner.centerx - label.get_width() // 2, banner.y + 8))
+
+    def _draw_build_guide_visual(self, rect):
+        self.screen.fill((0, 0, 0, 0))
+        pygame.draw.rect(self.screen, (36, 93, 55), rect, border_radius=18)
+        tile = 44
+        for y in range(rect.y, rect.bottom, tile):
+            for x in range(rect.x, rect.right, tile):
+                color = (43, 111, 65) if ((x - rect.x) // tile + (y - rect.y) // tile) % 2 == 0 else (31, 82, 49)
+                pygame.draw.rect(self.screen, color, (x, y, tile, tile))
+                pygame.draw.rect(self.screen, (112, 156, 104), (x, y, tile, tile), 1)
+
+        road = pygame.Rect(rect.x, rect.y + 92, rect.width, 48)
+        pygame.draw.rect(self.screen, (232, 198, 120), road)
+        pygame.draw.rect(self.screen, (151, 94, 36), road, 4)
+
+        valid = pygame.Rect(rect.x + 54, rect.y + 38, tile, tile)
+        blocked = pygame.Rect(rect.x + 186, rect.y + 92, tile, tile)
+        tower_tile = pygame.Rect(rect.x + 230, rect.y + 180, tile, tile)
+        for target, color in ((valid, (80, 220, 110)), (blocked, (240, 75, 75)), (tower_tile, (80, 220, 110))):
+            overlay = pygame.Surface((target.width, target.height), pygame.SRCALPHA)
+            overlay.fill((*color, 105))
+            self.screen.blit(overlay, target.topleft)
+            pygame.draw.rect(self.screen, color, target, 3, border_radius=6)
+
+        self._draw_tower_icon((tower_tile.centerx, tower_tile.centery), (65, 173, 89), "A")
+
+        pointer = [(valid.centerx + 12, valid.centery + 10), (valid.centerx + 46, valid.centery + 42), (valid.centerx + 22, valid.centery + 46)]
+        pygame.draw.polygon(self.screen, (245, 240, 230), pointer)
+        pygame.draw.polygon(self.screen, (30, 35, 48), pointer, 2)
+
+        label_font = pygame.font.SysFont("georgia", 15, bold=True)
+        for text, pos, color in (
+            ("Good spot", (valid.x - 8, valid.y - 24), (191, 245, 180)),
+            ("Road blocked", (blocked.x - 24, blocked.y + 52), (255, 165, 150)),
+        ):
+            surf = label_font.render(text, True, color)
+            self.screen.blit(surf, pos)
+
+    def _draw_towers_guide_visual(self, rect):
+        self.screen.fill((0, 0, 0, 0))
+        pygame.draw.rect(self.screen, (18, 26, 43), rect, border_radius=18)
+        center_y = rect.centery - 8
+        specs = [
+            ("Archer", "Fast", (65, 173, 89), "A", rect.x + 70),
+            ("Mage", "Slow", (147, 93, 232), "M", rect.centerx),
+            ("Cannon", "Splash", (218, 109, 32), "C", rect.right - 70),
+        ]
+        font = pygame.font.SysFont("georgia", 15, bold=True)
+        sub_font = pygame.font.SysFont("georgia", 12, bold=True)
+        for name, trait, color, letter, x in specs:
+            pygame.draw.circle(self.screen, (*color,), (x, center_y), 52, 2)
+            ring = pygame.Surface((116, 116), pygame.SRCALPHA)
+            pygame.draw.circle(ring, (*color, 32), (58, 58), 52)
+            self.screen.blit(ring, (x - 58, center_y - 58))
+            self._draw_tower_icon((x, center_y), color, letter)
+            name_surf = font.render(name, True, (244, 238, 228))
+            trait_surf = sub_font.render(trait, True, color)
+            self.screen.blit(name_surf, (x - name_surf.get_width() // 2, center_y + 62))
+            self.screen.blit(trait_surf, (x - trait_surf.get_width() // 2, center_y + 82))
+
+        self._draw_tiny_enemy((rect.centerx, rect.y + 44), 0)
+        pygame.draw.line(self.screen, (245, 230, 120), (rect.x + 70, center_y - 22), (rect.centerx - 6, rect.y + 50), 3)
+        pygame.draw.circle(self.screen, (180, 120, 255), (rect.centerx, rect.y + 44), 22, 3)
+        pygame.draw.circle(self.screen, (255, 150, 55), (rect.right - 70, center_y - 22), 20, 3)
+
+    def _draw_controls_guide_visual(self, rect):
+        self.screen.fill((0, 0, 0, 0))
+        pygame.draw.rect(self.screen, (18, 26, 43), rect, border_radius=18)
+        mouse_rect = pygame.Rect(rect.x + 32, rect.y + 44, 112, 156)
+        pygame.draw.rect(self.screen, (225, 230, 235), mouse_rect, border_radius=48)
+        pygame.draw.line(self.screen, (70, 78, 94), (mouse_rect.centerx, mouse_rect.y + 12), (mouse_rect.centerx, mouse_rect.y + 64), 2)
+        pygame.draw.circle(self.screen, (70, 78, 94), (mouse_rect.centerx, mouse_rect.y + 40), 8)
+        pygame.draw.circle(self.screen, (80, 210, 110), (mouse_rect.x + 32, mouse_rect.y + 48), 11)
+        pygame.draw.circle(self.screen, (118, 190, 245), (mouse_rect.right - 32, mouse_rect.y + 48), 11)
+
+        key_specs = [
+            ("F", "Sell", rect.x + 190, rect.y + 54),
+            ("P", "Pause", rect.x + 280, rect.y + 54),
+            ("ESC", "Clear", rect.x + 190, rect.y + 142),
+            ("1 2 3", "Towers", rect.x + 280, rect.y + 142),
+        ]
+        for label, desc, x, y in key_specs:
+            key = pygame.Rect(x, y, 70, 50)
+            pygame.draw.rect(self.screen, (42, 52, 76), key.move(0, 5), border_radius=12)
+            pygame.draw.rect(self.screen, (64, 78, 108), key, border_radius=12)
+            pygame.draw.rect(self.screen, (126, 145, 184), key, 2, border_radius=12)
+            label_surf = pygame.font.SysFont("georgia", 18, bold=True).render(label, True, (246, 236, 225))
+            desc_surf = pygame.font.SysFont("georgia", 11, bold=True).render(desc, True, (166, 178, 202))
+            self.screen.blit(label_surf, (key.centerx - label_surf.get_width() // 2, key.y + 8))
+            self.screen.blit(desc_surf, (key.centerx - desc_surf.get_width() // 2, key.y + 30))
+
+    def _draw_tower_icon(self, center, color, letter):
+        x, y = center
+        pygame.draw.circle(self.screen, (9, 13, 23), (x, y + 4), 24)
+        pygame.draw.circle(self.screen, color, (x, y), 22)
+        pygame.draw.circle(self.screen, tuple(min(255, c + 55) for c in color), (x, y), 22, 3)
+        surf = pygame.font.SysFont("georgia", 20, bold=True).render(letter, True, (248, 246, 238))
+        self.screen.blit(surf, (x - surf.get_width() // 2, y - surf.get_height() // 2 - 1))
+
+    def _draw_tiny_enemy(self, pos, variant=0):
+        x, y = pos
+        colors = [(92, 210, 92), (180, 140, 230), (210, 130, 60)]
+        color = colors[variant % len(colors)]
+        pygame.draw.ellipse(self.screen, (12, 16, 24), (x - 18, y + 12, 36, 10))
+        pygame.draw.circle(self.screen, color, (x, y), 16)
+        pygame.draw.circle(self.screen, tuple(min(255, c + 45) for c in color), (x - 5, y - 5), 5)
+        pygame.draw.circle(self.screen, (20, 25, 30), (x - 5, y - 2), 2)
+        pygame.draw.circle(self.screen, (20, 25, 30), (x + 6, y - 2), 2)
+
+    def _draw_mini_castle(self, pos):
+        x, y = pos
+        stone = (150, 154, 170)
+        pygame.draw.rect(self.screen, (108, 112, 128), (x - 32, y - 34, 64, 46))
+        pygame.draw.rect(self.screen, stone, (x - 28, y - 30, 56, 38))
+        pygame.draw.rect(self.screen, (188, 192, 205), (x - 28, y - 30, 56, 38), 2)
+        for ox in (-24, -8, 8):
+            pygame.draw.rect(self.screen, stone, (x + ox, y - 40, 12, 12))
+        pygame.draw.rect(self.screen, (82, 54, 30), (x - 8, y - 14, 16, 22), border_radius=4)
 
     def _draw_home_map_card(self, rect, map_index, map_data):
         selected = map_index == self.selected_map_index
