@@ -689,6 +689,8 @@ class Game:
         for proj in self.projectiles:
             proj.draw(self.screen)
 
+        self._draw_castle_hp_bar()
+
         self.ui_manager.draw_hud(self.gold, self.castle_hp, self.current_wave, self.player_name)
         mouse_pos = self._get_mouse_pos()
         self.ui_manager.draw_tower_panel(self.gold, self.selected_tower_type, self.sell_mode, mouse_pos)
@@ -1109,38 +1111,126 @@ class Game:
     def _draw_castle(self, surface=None):
         target = surface or self.screen
         cx, cy = self.waypoints[-1]
-        shadow = pygame.Rect(cx - 18, cy + 12, 74, 18)
-        base = pygame.Rect(cx - 10, cy - 18, 46, 34)
-        left_tower = pygame.Rect(cx - 18, cy - 28, 14, 30)
-        right_tower = pygame.Rect(cx + 30, cy - 28, 14, 30)
-        gate = pygame.Rect(cx + 8, cy - 2, 10, 18)
 
-        pygame.draw.ellipse(target, (33, 46, 31), shadow)
-        pygame.draw.rect(target, (146, 149, 164), base, border_radius=5)
-        pygame.draw.rect(target, (205, 208, 219), base, 2, border_radius=5)
-        pygame.draw.rect(target, (132, 136, 151), left_tower, border_radius=4)
-        pygame.draw.rect(target, (132, 136, 151), right_tower, border_radius=4)
-        pygame.draw.rect(target, (89, 66, 44), gate, border_radius=3)
+        # Stone colors
+        STONE      = (148, 152, 168)
+        STONE_LT   = (188, 192, 205)
+        STONE_DK   = (108, 112, 128)
+        SHADOW_CLR = (28,  38,  28)
+        WOOD       = (90,  64,  38)
+        WOOD_DK    = (62,  42,  22)
+        FLAG_RED   = (196, 52,  60)
 
-        for tower in (left_tower, right_tower):
-            for i in range(2):
-                crenel = pygame.Rect(tower.x + 2 + i * 5, tower.y - 4, 3, 5)
-                pygame.draw.rect(target, (205, 208, 219), crenel, border_radius=1)
+        # Anchor: path endpoint is the gate mouth
+        gx, gy = cx, cy
 
-        flag_pole_top = (right_tower.right - 1, right_tower.y - 10)
-        pygame.draw.line(target, (94, 70, 45), flag_pole_top, (right_tower.right - 1, right_tower.y + 6), 2)
-        pygame.draw.polygon(
-            target,
-            (191, 58, 67),
-            [
-                (flag_pole_top[0], flag_pole_top[1]),
-                (flag_pole_top[0] + 13, flag_pole_top[1] + 4),
-                (flag_pole_top[0], flag_pole_top[1] + 8),
-            ],
-        )
+        # Ground shadow
+        pygame.draw.ellipse(target, SHADOW_CLR, (gx - 42, gy + 8, 88, 16))
 
-        label = self.font.render("Castle", True, (248, 239, 208))
-        target.blit(label, (cx - label.get_width() // 2 + 28, cy + 10))
+        # ── Wall / base ───────────────────────────────────────────────
+        wall = pygame.Rect(gx - 36, gy - 28, 80, 42)
+        pygame.draw.rect(target, STONE_DK, wall)
+        pygame.draw.rect(target, STONE,    wall.inflate(-4, -4))
+        pygame.draw.rect(target, STONE_LT, wall, 2)
+
+        # Stone lines on wall
+        for row_offset in (8, 18):
+            pygame.draw.line(target, STONE_DK,
+                             (wall.left + 4,  wall.top + row_offset),
+                             (wall.right - 4, wall.top + row_offset), 1)
+        for bx in range(wall.left + 10, wall.right - 4, 14):
+            pygame.draw.line(target, STONE_DK,
+                             (bx, wall.top + 4), (bx, wall.top + 8), 1)
+            pygame.draw.line(target, STONE_DK,
+                             (bx + 7, wall.top + 12), (bx + 7, wall.top + 16), 1)
+
+        # Wall crenels
+        for i in range(5):
+            crenel = pygame.Rect(wall.left + 2 + i * 15, wall.top - 7, 9, 8)
+            pygame.draw.rect(target, STONE_DK, crenel)
+            pygame.draw.rect(target, STONE,    crenel.inflate(-2, -2))
+
+        # ── Gate ──────────────────────────────────────────────────────
+        gate = pygame.Rect(gx - 8, gy - 18, 18, 22)
+        pygame.draw.rect(target, WOOD_DK, gate, border_radius=3)
+        pygame.draw.rect(target, WOOD,    gate.inflate(-2, -2), border_radius=2)
+        # portcullis bars
+        for bar_x in range(gate.left + 2, gate.right - 1, 5):
+            pygame.draw.line(target, WOOD_DK,
+                             (bar_x, gate.top + 2), (bar_x, gate.bottom - 2), 1)
+        pygame.draw.line(target, WOOD_DK,
+                         (gate.left + 2, gate.top + 8), (gate.right - 2, gate.top + 8), 1)
+
+        # ── Left tower ────────────────────────────────────────────────
+        lt = pygame.Rect(gx - 50, gy - 44, 22, 52)
+        pygame.draw.rect(target, STONE_DK, lt)
+        pygame.draw.rect(target, STONE,    lt.inflate(-4, -4))
+        pygame.draw.rect(target, STONE_LT, lt, 2)
+        for i in range(3):
+            c = pygame.Rect(lt.left + 2 + i * 7, lt.top - 6, 5, 7)
+            pygame.draw.rect(target, STONE_DK, c)
+            pygame.draw.rect(target, STONE,    c.inflate(-2, -2))
+        # window
+        pygame.draw.rect(target, (42, 52, 80),
+                         (lt.centerx - 3, lt.top + 10, 6, 8), border_radius=2)
+
+        # ── Right (main) tower — taller ───────────────────────────────
+        rt = pygame.Rect(gx + 22, gy - 56, 26, 64)
+        pygame.draw.rect(target, STONE_DK, rt)
+        pygame.draw.rect(target, STONE,    rt.inflate(-4, -4))
+        pygame.draw.rect(target, STONE_LT, rt, 2)
+        for i in range(3):
+            c = pygame.Rect(rt.left + 2 + i * 8, rt.top - 7, 6, 8)
+            pygame.draw.rect(target, STONE_DK, c)
+            pygame.draw.rect(target, STONE,    c.inflate(-2, -2))
+        # windows
+        pygame.draw.rect(target, (42, 52, 80),
+                         (rt.centerx - 3, rt.top + 10, 6, 9), border_radius=2)
+        pygame.draw.rect(target, (42, 52, 80),
+                         (rt.centerx - 3, rt.top + 26, 6, 9), border_radius=2)
+
+        # ── Flag on main tower ────────────────────────────────────────
+        pole_x = rt.right - 3
+        pole_top = rt.top - 18
+        pygame.draw.line(target, WOOD, (pole_x, pole_top), (pole_x, rt.top), 2)
+        pygame.draw.polygon(target, FLAG_RED, [
+            (pole_x,      pole_top),
+            (pole_x + 14, pole_top + 5),
+            (pole_x,      pole_top + 10),
+        ])
+        pygame.draw.polygon(target, (220, 80, 90), [
+            (pole_x + 2,  pole_top + 2),
+            (pole_x + 11, pole_top + 5),
+            (pole_x + 2,  pole_top + 8),
+        ])
+
+    def _draw_castle_hp_bar(self):
+        cx, cy = self.waypoints[-1]
+        ratio  = max(0.0, self.castle_hp / 100)
+
+        bar_w = 64
+        bar_h = 7
+        bx    = cx - 32
+        by    = cy + 26
+
+        # background
+        pygame.draw.rect(self.screen, (50, 20, 20),  (bx - 1, by - 1, bar_w + 2, bar_h + 2), border_radius=4)
+        pygame.draw.rect(self.screen, (100, 30, 30), (bx, by, bar_w, bar_h), border_radius=3)
+
+        # fill — green → yellow → red
+        if ratio > 0.5:
+            t   = (ratio - 0.5) * 2
+            clr = (int(255 * (1 - t)), 210, 40)
+        else:
+            t   = ratio * 2
+            clr = (220, int(180 * t), 20)
+
+        fill_w = max(2, int(bar_w * ratio))
+        pygame.draw.rect(self.screen, clr, (bx, by, fill_w, bar_h), border_radius=3)
+
+        font  = pygame.font.SysFont("verdana", 10, bold=True)
+        label = font.render(f"HP {self.castle_hp}", True, (240, 230, 200))
+        self.screen.blit(label, (cx - label.get_width() // 2, by + bar_h + 3))
 
     def _draw_start_wave_button(self):
         label_text = f"Start Wave {self.current_wave + 1}"
