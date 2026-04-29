@@ -4,6 +4,7 @@ import unicodedata
 import random
 import csv
 import os
+import math
 from collections import Counter
 
 from src.towers.archer_tower import ArcherTower
@@ -213,8 +214,12 @@ class Game:
         self.stats_back_btn = pygame.Rect(0, 0, 0, 0)
         self.stats_prev_btn = pygame.Rect(0, 0, 0, 0)
         self.stats_next_btn = pygame.Rect(0, 0, 0, 0)
+        self.stats_graph_btn = pygame.Rect(0, 0, 0, 0)
+        self.stats_graph_option_buttons = []
         self.stats_table_page = 0
         self.stats_rows_per_page = 16
+        self.stats_view_mode = "table"
+        self.stats_selected_graph = 0
         self.pause_btn     = pygame.Rect(GAME_W + 24, SCREEN_H - 162, PANEL_WIDTH - 48, 32)
         self.quit_game_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 120, PANEL_WIDTH - 48, 32)
         self.static_battlefield = self._build_static_battlefield()
@@ -374,6 +379,7 @@ class Game:
 
     def _open_statistics_screen(self):
         self.stats_table_page = 0
+        self.stats_view_mode = "table"
         self.state = self.STATE_STATISTICS
         self.home_name_input_active = False
 
@@ -392,10 +398,21 @@ class Game:
         if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
             self.state = self.STATE_HOME
             self.home_name_input_active = True
+        elif event.key in (pygame.K_g, pygame.K_TAB):
+            self.stats_view_mode = "graphs" if self.stats_view_mode == "table" else "table"
+        elif pygame.K_1 <= event.key <= pygame.K_6:
+            self.stats_view_mode = "graphs"
+            self.stats_selected_graph = event.key - pygame.K_1
         elif event.key in (pygame.K_RIGHT, pygame.K_d, pygame.K_SPACE, pygame.K_RETURN, pygame.K_DOWN):
-            self.stats_table_page = min(max_page, self.stats_table_page + 1)
+            if self.stats_view_mode == "table":
+                self.stats_table_page = min(max_page, self.stats_table_page + 1)
+            else:
+                self.stats_selected_graph = min(5, self.stats_selected_graph + 1)
         elif event.key in (pygame.K_LEFT, pygame.K_a, pygame.K_UP):
-            self.stats_table_page = max(0, self.stats_table_page - 1)
+            if self.stats_view_mode == "table":
+                self.stats_table_page = max(0, self.stats_table_page - 1)
+            else:
+                self.stats_selected_graph = max(0, self.stats_selected_graph - 1)
 
     def _append_name_text(self, text):
         if not self._is_name_character(text):
@@ -485,10 +502,23 @@ class Game:
             if self.stats_back_btn.collidepoint(pos):
                 self.state = self.STATE_HOME
                 self.home_name_input_active = True
+            elif self.stats_graph_btn.collidepoint(pos):
+                self.stats_view_mode = "graphs" if self.stats_view_mode == "table" else "table"
             elif self.stats_prev_btn.collidepoint(pos):
-                self.stats_table_page = max(0, self.stats_table_page - 1)
+                if self.stats_view_mode == "table":
+                    self.stats_table_page = max(0, self.stats_table_page - 1)
+                else:
+                    self.stats_selected_graph = max(0, self.stats_selected_graph - 1)
             elif self.stats_next_btn.collidepoint(pos):
-                self.stats_table_page = min(self._get_stats_max_page(), self.stats_table_page + 1)
+                if self.stats_view_mode == "table":
+                    self.stats_table_page = min(self._get_stats_max_page(), self.stats_table_page + 1)
+                else:
+                    self.stats_selected_graph = min(5, self.stats_selected_graph + 1)
+            elif self.stats_view_mode == "graphs":
+                for index, rect in self.stats_graph_option_buttons:
+                    if rect.collidepoint(pos):
+                        self.stats_selected_graph = index
+                        return
             return
 
         if self.state in (self.STATE_GAME_OVER, self.STATE_VICTORY):
@@ -1483,36 +1513,52 @@ class Game:
         subtitle = pygame.font.SysFont("georgia", 13, bold=True).render(subtitle_text, True, (145, 157, 184))
         self.screen.blit(subtitle, (panel.x + 34, panel.y + 68))
 
-        table = pygame.Rect(panel.x + 24, panel.y + 98, panel.width - 48, 360)
-        self._draw_stats_table(table, rows)
+        content_rect = pygame.Rect(panel.x + 24, panel.y + 98, panel.width - 48, 360)
+        if self.stats_view_mode == "graphs":
+            self._draw_stats_graphs(content_rect, rows)
+        else:
+            self._draw_stats_table(content_rect, rows)
 
         page_label = pygame.font.SysFont("georgia", 13, bold=True).render(
-            f"Page {self.stats_table_page + 1} / {max_page + 1}",
+            f"Graph {self.stats_selected_graph + 1} / 6" if self.stats_view_mode == "graphs" else f"Page {self.stats_table_page + 1} / {max_page + 1}",
             True,
             (218, 201, 154),
         )
         self.screen.blit(page_label, (panel.centerx - page_label.get_width() // 2, panel.bottom - 82))
 
         self.stats_back_btn = pygame.Rect(panel.x + 30, panel.bottom - 58, 150, 38)
-        self.stats_prev_btn = pygame.Rect(panel.centerx - 112, panel.bottom - 58, 104, 38)
-        self.stats_next_btn = pygame.Rect(panel.centerx + 8, panel.bottom - 58, 150, 38)
+        self.stats_prev_btn = pygame.Rect(panel.centerx - 154, panel.bottom - 58, 94, 38)
+        self.stats_graph_btn = pygame.Rect(panel.centerx - 48, panel.bottom - 58, 124, 38)
+        self.stats_next_btn = pygame.Rect(panel.centerx + 88, panel.bottom - 58, 150, 38)
 
         self._draw_help_nav_button(self.stats_back_btn, "Menu", mouse_pos, enabled=True)
-        self._draw_help_nav_button(self.stats_prev_btn, "Prev", mouse_pos, enabled=self.stats_table_page > 0)
+        self._draw_help_nav_button(
+            self.stats_prev_btn,
+            "Prev",
+            mouse_pos,
+            enabled=(self.stats_table_page > 0 if self.stats_view_mode == "table" else self.stats_selected_graph > 0),
+        )
+        self._draw_help_nav_button(
+            self.stats_graph_btn,
+            "Table" if self.stats_view_mode == "graphs" else "Graphs",
+            mouse_pos,
+            enabled=True,
+            primary=self.stats_view_mode == "table",
+        )
         self._draw_help_nav_button(
             self.stats_next_btn,
             "Next",
             mouse_pos,
-            enabled=self.stats_table_page < max_page,
+            enabled=(self.stats_table_page < max_page if self.stats_view_mode == "table" else self.stats_selected_graph < 5),
             primary=True,
         )
 
         hint = pygame.font.SysFont("georgia", 12, bold=True).render(
-            "Left/Right or Space flips pages. ESC returns to menu.",
+            "G or Tab toggles graphs. Left/Right changes pages or graph type. ESC returns to menu.",
             True,
             (126, 138, 162),
         )
-        self.screen.blit(hint, (panel.right - hint.get_width() - 32, panel.y + 72))
+        self.screen.blit(hint, (panel.right - hint.get_width() - 32, panel.y + 84))
 
     def _draw_stats_table(self, rect, rows):
         pygame.draw.rect(self.screen, (7, 10, 18), rect.move(0, 6), border_radius=18)
@@ -1563,6 +1609,325 @@ class Game:
                 surf = row_font.render(text, True, (214, 222, 235))
                 self.screen.blit(surf, (x + 4, y))
                 x += width
+
+    def _draw_stats_graphs(self, rect, rows):
+        pygame.draw.rect(self.screen, (7, 10, 18), rect.move(0, 6), border_radius=18)
+        pygame.draw.rect(self.screen, (21, 29, 48), rect, border_radius=18)
+        pygame.draw.rect(self.screen, (72, 88, 122), rect, 1, border_radius=18)
+
+        if not rows:
+            empty = pygame.font.SysFont("georgia", 18, bold=True).render("No stats recorded yet.", True, (166, 178, 202))
+            self.screen.blit(empty, (rect.centerx - empty.get_width() // 2, rect.centery - empty.get_height() // 2))
+            return
+
+        menu_rect = pygame.Rect(rect.x + 12, rect.y + 16, 150, rect.height - 32)
+        graph_rect = pygame.Rect(menu_rect.right + 12, rect.y + 16, rect.right - menu_rect.right - 24, rect.height - 32)
+        self._draw_graph_menu(menu_rect)
+
+        graphs = [
+            ("Leaderboard", self._draw_leaderboard_graph),
+            ("Performance Radar", self._draw_performance_radar_graph),
+            ("Gold vs Wave", self._draw_gold_wave_scatter_graph),
+            ("Damage Efficiency", self._draw_damage_efficiency_graph),
+            ("Survival Curve", self._draw_survival_curve_graph),
+            ("Wave Heatmap", self._draw_wave_heatmap_graph),
+        ]
+        self.stats_selected_graph = max(0, min(self.stats_selected_graph, len(graphs) - 1))
+        title, draw_fn = graphs[self.stats_selected_graph]
+        draw_fn(graph_rect, rows, title)
+
+    def _draw_graph_menu(self, rect):
+        pygame.draw.rect(self.screen, (12, 18, 31), rect, border_radius=14)
+        pygame.draw.rect(self.screen, (55, 68, 98), rect, 1, border_radius=14)
+
+        title = pygame.font.SysFont("georgia", 15, bold=True).render("Choose Graph", True, (248, 228, 160))
+        self.screen.blit(title, (rect.centerx - title.get_width() // 2, rect.y + 12))
+
+        labels = [
+            "1 Leaderboard",
+            "2 Radar",
+            "3 Gold/Wave",
+            "4 Efficiency",
+            "5 Survival",
+            "6 Heatmap",
+        ]
+        self.stats_graph_option_buttons = []
+        font = pygame.font.SysFont("georgia", 12, bold=True)
+        for index, label in enumerate(labels):
+            btn = pygame.Rect(rect.x + 10, rect.y + 42 + index * 45, rect.width - 20, 34)
+            selected = index == self.stats_selected_graph
+            hover = btn.collidepoint(self._get_mouse_pos())
+            fill = (64, 78, 108) if selected else ((42, 52, 76) if hover else (27, 36, 58))
+            border = (229, 183, 57) if selected else (76, 92, 122)
+            pygame.draw.rect(self.screen, fill, btn, border_radius=12)
+            pygame.draw.rect(self.screen, border, btn, 2, border_radius=12)
+            surf = font.render(label, True, (248, 238, 210) if selected else (188, 198, 218))
+            self.screen.blit(surf, (btn.x + 10, btn.centery - surf.get_height() // 2))
+            self.stats_graph_option_buttons.append((index, btn))
+
+    def _player_stats(self, rows):
+        players = {}
+        for row in rows:
+            name = row.get("player_name", "-") or "-"
+            stat = players.setdefault(name, {
+                "name": name,
+                "waves": [],
+                "wave": 0,
+                "damage": 0.0,
+                "kills": 0.0,
+                "gold": 0.0,
+                "time": 0.0,
+                "hp_values": [],
+            })
+            wave = self._to_number(row.get("wave_number"))
+            stat["waves"].append(wave)
+            stat["wave"] = max(stat["wave"], wave)
+            stat["damage"] += self._to_number(row.get("damage_dealt"))
+            stat["kills"] += self._to_number(row.get("enemies_defeated"))
+            stat["gold"] += self._to_number(row.get("gold_spent"))
+            stat["time"] += self._to_number(row.get("survival_time"))
+            stat["hp_values"].append(self._to_number(row.get("castle_hp")))
+        for stat in players.values():
+            stat["hp"] = sum(stat["hp_values"]) / max(len(stat["hp_values"]), 1)
+            stat["efficiency"] = stat["damage"] / max(stat["gold"], 1)
+        return list(players.values())
+
+    def _draw_leaderboard_graph(self, rect, rows, title):
+        players = sorted(self._player_stats(rows), key=lambda p: (p["wave"], p["time"]), reverse=True)[:6]
+        values = [p["wave"] for p in players]
+        labels = [p["name"] for p in players]
+        self._draw_named_bar_chart(
+            rect,
+            "Leaderboard",
+            labels,
+            values,
+            (229, 183, 57),
+            suffix="w",
+            note="Highest wave reached. Ties use longer survival time.",
+        )
+
+    def _draw_damage_efficiency_graph(self, rect, rows, title):
+        players = sorted(self._player_stats(rows), key=lambda p: p["efficiency"], reverse=True)[:6]
+        values = [p["efficiency"] for p in players]
+        labels = [p["name"] for p in players]
+        self._draw_named_bar_chart(
+            rect,
+            "Damage Efficiency",
+            labels,
+            values,
+            (82, 190, 120),
+            decimals=1,
+            note="Damage dealt per gold spent. Higher means more efficient spending.",
+        )
+
+    def _draw_gold_wave_scatter_graph(self, rect, rows, title):
+        players = self._player_stats(rows)
+        self._draw_chart_frame(rect, "Gold Spent vs Wave Reached", (118, 190, 245), "Low gold + high wave means strong value.")
+        plot = pygame.Rect(rect.x + 56, rect.y + 74, rect.width - 94, rect.height - 120)
+        self._draw_chart_grid(plot)
+        max_gold = max([p["gold"] for p in players] + [1])
+        max_wave = max([p["wave"] for p in players] + [1])
+        font = pygame.font.SysFont("verdana", 9, bold=True)
+        ranked = sorted(players, key=lambda p: (p["wave"], -p["gold"]), reverse=True)
+        for index, player in enumerate(ranked):
+            x = plot.x + int((player["gold"] / max_gold) * plot.width)
+            y = plot.bottom - int((player["wave"] / max_wave) * plot.height)
+            color = (82, 190, 120) if player["gold"] <= max_gold * 0.4 and player["wave"] >= max_wave * 0.6 else (118, 190, 245)
+            pygame.draw.circle(self.screen, color, (x, y), 6)
+            if index < 6:
+                label = font.render(player["name"][:6], True, (214, 222, 235))
+                lx = min(plot.right - label.get_width(), x + 8)
+                self.screen.blit(label, (lx, y - 6))
+        self._draw_axis_labels(plot, "gold spent", "wave")
+
+    def _draw_survival_curve_graph(self, rect, rows, title):
+        by_wave = {}
+        for row in rows:
+            wave = int(self._to_number(row.get("wave_number")))
+            by_wave.setdefault(wave, []).append(self._to_number(row.get("castle_hp")))
+        waves = sorted(by_wave)
+        values = [sum(by_wave[w]) / len(by_wave[w]) for w in waves]
+        self._draw_line_chart(
+            rect,
+            "Survival Curve",
+            values,
+            (235, 116, 120),
+            max_value=100,
+            note="Average castle HP after each wave. Sharp drops mark difficult waves.",
+        )
+
+    def _draw_wave_heatmap_graph(self, rect, rows, title):
+        by_wave = {}
+        players = set()
+        for row in rows:
+            player = row.get("player_name", "-")
+            wave = int(self._to_number(row.get("wave_number")))
+            players.add(player)
+            by_wave.setdefault(wave, set()).add(player)
+        waves = sorted(by_wave)
+        total_players = max(len(players), 1)
+        self._draw_chart_frame(rect, "Wave Survival Heatmap", (247, 136, 80), "Brighter cells mean more players reached that wave.")
+        grid = pygame.Rect(rect.x + 52, rect.y + 100, rect.width - 104, 130)
+        cell_w = max(42, min(72, grid.width // max(len(waves), 1)))
+        font = pygame.font.SysFont("verdana", 10, bold=True)
+        for index, wave in enumerate(waves):
+            rate = len(by_wave[wave]) / total_players
+            intensity = int(55 + rate * 180)
+            color = (intensity, int(70 + rate * 150), 70)
+            cell = pygame.Rect(grid.x + index * cell_w, grid.y, cell_w - 4, grid.height)
+            pygame.draw.rect(self.screen, color, cell, border_radius=8)
+            pygame.draw.rect(self.screen, (20, 25, 36), cell, 1, border_radius=8)
+            wave_surf = font.render(f"W{wave}", True, (248, 246, 238))
+            count_surf = font.render(str(len(by_wave[wave])), True, (20, 25, 36))
+            self.screen.blit(wave_surf, (cell.centerx - wave_surf.get_width() // 2, cell.y + 12))
+            self.screen.blit(count_surf, (cell.centerx - count_surf.get_width() // 2, cell.centery - 5))
+
+    def _draw_performance_radar_graph(self, rect, rows, title):
+        players = sorted(self._player_stats(rows), key=lambda p: (p["wave"], p["damage"]), reverse=True)[:3]
+        metrics = [
+            ("Kills", "kills"),
+            ("Damage", "damage"),
+            ("Wave", "wave"),
+            ("Time", "time"),
+            ("HP", "hp"),
+        ]
+        max_values = {key: max([p[key] for p in players] + [1]) for _, key in metrics}
+        self._draw_chart_frame(rect, "Performance Radar", (147, 118, 232), "Top players compared across five normalized metrics.")
+        center = (rect.centerx + 24, rect.y + 194)
+        radius = 86
+        colors = [(229, 183, 57), (82, 190, 120), (118, 190, 245)]
+        font = pygame.font.SysFont("verdana", 10, bold=True)
+
+        for ring in (0.33, 0.66, 1.0):
+            pts = []
+            for index in range(len(metrics)):
+                angle = -math.pi / 2 + index * math.tau / len(metrics)
+                pts.append((int(center[0] + math.cos(angle) * radius * ring), int(center[1] + math.sin(angle) * radius * ring)))
+            pygame.draw.polygon(self.screen, (45, 55, 78), pts, 1)
+
+        for index, (label, _) in enumerate(metrics):
+            angle = -math.pi / 2 + index * math.tau / len(metrics)
+            end = (center[0] + math.cos(angle) * radius, center[1] + math.sin(angle) * radius)
+            pygame.draw.line(self.screen, (55, 68, 98), center, end, 1)
+            surf = font.render(label, True, (214, 222, 235))
+            self.screen.blit(surf, (end[0] - surf.get_width() // 2, end[1] - surf.get_height() // 2))
+
+        for p_index, player in enumerate(players):
+            pts = []
+            for index, (_, key) in enumerate(metrics):
+                angle = -math.pi / 2 + index * math.tau / len(metrics)
+                value = player[key] / max_values[key]
+                pts.append((int(center[0] + math.cos(angle) * radius * value), int(center[1] + math.sin(angle) * radius * value)))
+            pygame.draw.polygon(self.screen, (*colors[p_index], 50), pts)
+            pygame.draw.polygon(self.screen, colors[p_index], pts, 2)
+            legend = font.render(player["name"], True, colors[p_index])
+            self.screen.blit(legend, (rect.x + 18, rect.y + 64 + p_index * 18))
+
+    def _draw_named_bar_chart(self, rect, title, labels, values, accent, suffix="", decimals=0, note=""):
+        self._draw_chart_frame(rect, title, accent, note)
+        plot = pygame.Rect(rect.x + 56, rect.y + 78, rect.width - 96, rect.height - 130)
+        self._draw_chart_grid(plot)
+        if not values:
+            return
+
+        top_value = max(max(values), 1)
+        gap = 12
+        bar_w = max(16, (plot.width - gap * (len(values) - 1)) // max(len(values), 1))
+        font = pygame.font.SysFont("verdana", 9, bold=True)
+        x = plot.x
+        for label, value in zip(labels, values):
+            bar_h = int((value / top_value) * plot.height)
+            bar = pygame.Rect(x, plot.bottom - bar_h, bar_w, bar_h)
+            pygame.draw.rect(self.screen, accent, bar, border_radius=5)
+            text_value = f"{value:.{decimals}f}{suffix}" if decimals else f"{int(value)}{suffix}"
+            value_surf = font.render(text_value, True, (248, 238, 210))
+            self.screen.blit(value_surf, (bar.centerx - value_surf.get_width() // 2, bar.y - 14))
+            name_surf = font.render(label[:7], True, (214, 222, 235))
+            self.screen.blit(name_surf, (bar.centerx - name_surf.get_width() // 2, plot.bottom + 8))
+            x += bar_w + gap
+
+    def _draw_axis_labels(self, plot, x_label, y_label):
+        font = pygame.font.SysFont("verdana", 9, bold=True)
+        x_surf = font.render(x_label, True, (145, 157, 184))
+        y_surf = font.render(y_label, True, (145, 157, 184))
+        self.screen.blit(x_surf, (plot.centerx - x_surf.get_width() // 2, plot.bottom + 12))
+        self.screen.blit(y_surf, (plot.x - y_surf.get_width() // 2, plot.y - 18))
+
+    def _to_number(self, value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _draw_chart_frame(self, rect, title, accent, note=""):
+        pygame.draw.rect(self.screen, (12, 18, 31), rect, border_radius=14)
+        pygame.draw.rect(self.screen, (55, 68, 98), rect, 1, border_radius=14)
+        title_surf = pygame.font.SysFont("georgia", 18, bold=True).render(title, True, (244, 238, 228))
+        self.screen.blit(title_surf, (rect.x + 12, rect.y + 8))
+        if note:
+            note_surf = pygame.font.SysFont("georgia", 11, bold=True).render(note, True, (145, 157, 184))
+            self.screen.blit(note_surf, (rect.x + 12, rect.y + 32))
+        pygame.draw.rect(self.screen, accent, (rect.x + 12, rect.y + 50, rect.width - 24, 3), border_radius=2)
+
+    def _draw_line_chart(self, rect, title, values, accent, max_value=None, note=""):
+        self._draw_chart_frame(rect, title, accent, note)
+        plot = pygame.Rect(rect.x + 50, rect.y + 78, rect.width - 84, rect.height - 126)
+        self._draw_chart_grid(plot)
+
+        if not values:
+            return
+
+        top_value = max_value if max_value is not None else max(max(values), 1)
+        top_value = max(top_value, 1)
+        points = []
+        count = len(values)
+        for index, value in enumerate(values):
+            x = plot.x if count == 1 else plot.x + int(index * plot.width / (count - 1))
+            y = plot.bottom - int((value / top_value) * plot.height)
+            points.append((x, y))
+
+        if len(points) >= 2:
+            pygame.draw.lines(self.screen, accent, False, points, 3)
+        for point in points[-16:]:
+            pygame.draw.circle(self.screen, accent, point, 3)
+
+        self._draw_chart_value_labels(rect, values, accent)
+
+    def _draw_bar_chart(self, rect, title, values, accent):
+        self._draw_chart_frame(rect, title, accent)
+        plot = pygame.Rect(rect.x + 34, rect.y + 46, rect.width - 52, rect.height - 68)
+        self._draw_chart_grid(plot)
+
+        if not values:
+            return
+
+        top_value = max(max(values), 1)
+        visible = values[-18:]
+        gap = 3
+        bar_w = max(4, (plot.width - gap * (len(visible) - 1)) // max(len(visible), 1))
+        x = plot.x
+        for value in visible:
+            bar_h = int((value / top_value) * plot.height)
+            bar = pygame.Rect(x, plot.bottom - bar_h, bar_w, bar_h)
+            pygame.draw.rect(self.screen, accent, bar, border_radius=3)
+            x += bar_w + gap
+
+        self._draw_chart_value_labels(rect, values, accent)
+
+    def _draw_chart_grid(self, plot):
+        pygame.draw.rect(self.screen, (8, 12, 21), plot, border_radius=8)
+        for i in range(1, 4):
+            y = plot.y + i * plot.height // 4
+            pygame.draw.line(self.screen, (34, 43, 64), (plot.x, y), (plot.right, y), 1)
+        pygame.draw.line(self.screen, (83, 101, 136), (plot.x, plot.bottom), (plot.right, plot.bottom), 1)
+        pygame.draw.line(self.screen, (83, 101, 136), (plot.x, plot.y), (plot.x, plot.bottom), 1)
+
+    def _draw_chart_value_labels(self, rect, values, accent):
+        font = pygame.font.SysFont("verdana", 9, bold=True)
+        total = int(sum(values))
+        peak = int(max(values)) if values else 0
+        label = font.render(f"total {total}   peak {peak}", True, accent)
+        self.screen.blit(label, (rect.right - label.get_width() - 12, rect.bottom - 16))
 
     def _draw_name_input(self, rect):
         now = pygame.time.get_ticks()
