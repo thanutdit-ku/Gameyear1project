@@ -2,6 +2,8 @@ import pygame
 import sys
 import unicodedata
 import random
+import csv
+import os
 from collections import Counter
 
 from src.towers.archer_tower import ArcherTower
@@ -10,7 +12,7 @@ from src.towers.cannon_tower import CannonTower
 from src.projectiles import Projectile
 from src.wave import Wave
 from src.enemies.slime import MiniSlime
-from src.stats_tracker import StatsTracker
+from src.stats_tracker import StatsTracker, CSV_PATH
 from src.ui_manager import UIManager, GAME_W, GAME_H, HUD_HEIGHT, PANEL_WIDTH, SCREEN_W, SCREEN_H
 
 FPS = 60
@@ -137,6 +139,7 @@ class Game:
     STATE_PREP      = "prep"
     STATE_WAVE      = "wave"
     STATE_HOW_TO_PLAY = "how_to_play"
+    STATE_STATISTICS = "statistics"
     STATE_GAME_OVER = "game_over"
     STATE_VICTORY   = "victory"
 
@@ -199,6 +202,7 @@ class Game:
         self.home_name_input_active = True
         self.home_name_error_until = 0
         self.home_start_btn = pygame.Rect(0, 0, 0, 0)
+        self.home_stats_btn = pygame.Rect(0, 0, 0, 0)
         self.home_help_btn = pygame.Rect(0, 0, 0, 0)
         self.home_quit_btn = pygame.Rect(0, 0, 0, 0)
         self.home_map_buttons = []
@@ -206,6 +210,11 @@ class Game:
         self.how_to_play_prev_btn = pygame.Rect(0, 0, 0, 0)
         self.how_to_play_next_btn = pygame.Rect(0, 0, 0, 0)
         self.how_to_play_page = 0
+        self.stats_back_btn = pygame.Rect(0, 0, 0, 0)
+        self.stats_prev_btn = pygame.Rect(0, 0, 0, 0)
+        self.stats_next_btn = pygame.Rect(0, 0, 0, 0)
+        self.stats_table_page = 0
+        self.stats_rows_per_page = 16
         self.pause_btn     = pygame.Rect(GAME_W + 24, SCREEN_H - 162, PANEL_WIDTH - 48, 32)
         self.quit_game_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 120, PANEL_WIDTH - 48, 32)
         self.static_battlefield = self._build_static_battlefield()
@@ -277,6 +286,8 @@ class Game:
             return "menu"
         if self.state == self.STATE_HOW_TO_PLAY:
             return "how_to_play"
+        if self.state == self.STATE_STATISTICS:
+            return "statistics"
         if self.state in (self.STATE_PREP, self.STATE_WAVE):
             return "playing"
         if self.state == self.STATE_VICTORY:
@@ -322,6 +333,9 @@ class Game:
                 if self.state == self.STATE_HOW_TO_PLAY:
                     self._handle_how_to_play_keydown(event)
                     continue
+                if self.state == self.STATE_STATISTICS:
+                    self._handle_statistics_keydown(event)
+                    continue
                 if event.key == pygame.K_ESCAPE:
                     self.selected_tower_type = None
                     self.sell_mode = False
@@ -358,6 +372,11 @@ class Game:
         elif allow_key_text and self.home_name_input_active and event.unicode and self._is_name_character(event.unicode):
             self._append_name_text(event.unicode)
 
+    def _open_statistics_screen(self):
+        self.stats_table_page = 0
+        self.state = self.STATE_STATISTICS
+        self.home_name_input_active = False
+
     def _handle_how_to_play_keydown(self, event):
         max_page = len(self._get_how_to_play_pages()) - 1
         if event.key in (pygame.K_ESCAPE, pygame.K_h, pygame.K_F1):
@@ -367,6 +386,16 @@ class Game:
             self.how_to_play_page = min(max_page, self.how_to_play_page + 1)
         elif event.key in (pygame.K_LEFT, pygame.K_a, pygame.K_BACKSPACE):
             self.how_to_play_page = max(0, self.how_to_play_page - 1)
+
+    def _handle_statistics_keydown(self, event):
+        max_page = self._get_stats_max_page()
+        if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            self.state = self.STATE_HOME
+            self.home_name_input_active = True
+        elif event.key in (pygame.K_RIGHT, pygame.K_d, pygame.K_SPACE, pygame.K_RETURN, pygame.K_DOWN):
+            self.stats_table_page = min(max_page, self.stats_table_page + 1)
+        elif event.key in (pygame.K_LEFT, pygame.K_a, pygame.K_UP):
+            self.stats_table_page = max(0, self.stats_table_page - 1)
 
     def _append_name_text(self, text):
         if not self._is_name_character(text):
@@ -384,6 +413,7 @@ class Game:
     def _try_start_campaign(self):
         self.player_name = " ".join(self.player_name.strip().split())
         if self.player_name:
+            self.stats_tracker.set_player_name(self.player_name)
             self.state = self.STATE_PREP
             self.home_name_input_active = False
             self._queue_next_wave()
@@ -427,6 +457,8 @@ class Game:
                 self.home_name_input_active = False
             elif self.home_start_btn.collidepoint(pos):
                 self._try_start_campaign()
+            elif self.home_stats_btn.collidepoint(pos):
+                self._open_statistics_screen()
             elif self.home_help_btn.collidepoint(pos):
                 self.how_to_play_page = 0
                 self.state = self.STATE_HOW_TO_PLAY
@@ -447,6 +479,16 @@ class Game:
             elif self.how_to_play_next_btn.collidepoint(pos):
                 max_page = len(self._get_how_to_play_pages()) - 1
                 self.how_to_play_page = min(max_page, self.how_to_play_page + 1)
+            return
+
+        if self.state == self.STATE_STATISTICS:
+            if self.stats_back_btn.collidepoint(pos):
+                self.state = self.STATE_HOME
+                self.home_name_input_active = True
+            elif self.stats_prev_btn.collidepoint(pos):
+                self.stats_table_page = max(0, self.stats_table_page - 1)
+            elif self.stats_next_btn.collidepoint(pos):
+                self.stats_table_page = min(self._get_stats_max_page(), self.stats_table_page + 1)
             return
 
         if self.state in (self.STATE_GAME_OVER, self.STATE_VICTORY):
@@ -564,7 +606,7 @@ class Game:
     # ------------------------------------------------------------------
 
     def update(self, dt):
-        if self.state in (self.STATE_HOME, self.STATE_HOW_TO_PLAY):
+        if self.state in (self.STATE_HOME, self.STATE_HOW_TO_PLAY, self.STATE_STATISTICS):
             return
 
         # Always tick flashes so they fade even in prep/paused state
@@ -694,23 +736,14 @@ class Game:
 
         if self.check_game_over():
             self.state = self.STATE_GAME_OVER
-            self._save_session_summary("lose")
         elif self.current_wave >= MAX_WAVES:
             self.state = self.STATE_VICTORY
-            self._save_session_summary("win")
         else:
             self.state = self.STATE_PREP
             self._queue_next_wave()
 
     def check_game_over(self):
         return self.castle_hp <= 0
-
-    def _save_session_summary(self, result):
-        self.stats_tracker.save_session_summary(
-            waves_played=self.current_wave,
-            castle_hp_lost=100 - self.castle_hp,
-            result=result,
-        )
 
     # ------------------------------------------------------------------
     # Draw
@@ -724,6 +757,11 @@ class Game:
 
         if self.state == self.STATE_HOW_TO_PLAY:
             self._draw_how_to_play_screen()
+            self._present_frame()
+            return
+
+        if self.state == self.STATE_STATISTICS:
+            self._draw_statistics_screen()
             self._present_frame()
             return
 
@@ -952,8 +990,9 @@ class Game:
             self.screen.blit(desc_surf,  (rect.x + 18, rect.y + 28))
 
         self.home_start_btn = pygame.Rect(panel.x + 24, panel.y + 454, 270, 44)
-        self.home_help_btn = pygame.Rect(panel.x + 34, panel.y + 510, 122, 26)
-        self.home_quit_btn  = pygame.Rect(panel.x + 164, panel.y + 510, 122, 26)
+        self.home_stats_btn = pygame.Rect(panel.x + 24, panel.y + 510, 118, 28)
+        self.home_help_btn = pygame.Rect(panel.x + 150, panel.y + 510, 146, 28)
+        self.home_quit_btn  = pygame.Rect(SCREEN_W - 104, SCREEN_H - 38, 92, 30)
 
         self._draw_home_button(
             self.home_start_btn,
@@ -965,6 +1004,15 @@ class Game:
             glow_strength=shimmer,
         )
         self._draw_home_button(
+            self.home_stats_btn,
+            "Statistics",
+            "View CSV",
+            (54, 72, 108),
+            (26, 36, 58),
+            hover=self.home_stats_btn.collidepoint(self._get_mouse_pos()),
+            glow_strength=0.0,
+        )
+        self._draw_home_button(
             self.home_help_btn,
             "How to Play",
             "Open guide",
@@ -973,16 +1021,6 @@ class Game:
             hover=self.home_help_btn.collidepoint(self._get_mouse_pos()),
             glow_strength=0.0,
         )
-        self._draw_home_button(
-            self.home_quit_btn,
-            "Quit",
-            "Exit the game",
-            (54, 65, 94),
-            (27, 34, 52),
-            hover=self.home_quit_btn.collidepoint(self._get_mouse_pos()),
-            glow_strength=0.0,
-        )
-
         preview_rect = pygame.Rect(392, 52, 364, 496)
         preview_shadow = preview_rect.move(12, 16)
         pygame.draw.rect(self.screen, (4, 6, 12), preview_shadow, border_radius=34)
@@ -1013,6 +1051,16 @@ class Game:
             )
             self.home_map_buttons.append((map_index, rect))
             self._draw_home_map_card(rect, map_index, map_data)
+
+        self._draw_home_button(
+            self.home_quit_btn,
+            "Quit",
+            "Exit the game",
+            (142, 48, 52),
+            (84, 28, 36),
+            hover=self.home_quit_btn.collidepoint(self._get_mouse_pos()),
+            glow_strength=0.0,
+        )
 
     def _draw_how_to_play_screen(self):
         self.screen.blit(self.home_backdrop, (0, 0))
@@ -1144,13 +1192,23 @@ class Game:
             bottom, border, text_color = (28, 38, 62), (107, 126, 164), (236, 239, 246)
 
         pygame.draw.rect(self.screen, (6, 9, 16), rect.move(0, 5), border_radius=14)
-        for offset in range(rect.height):
-            t = offset / max(rect.height, 1)
-            color = tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3))
-            pygame.draw.line(self.screen, color, (rect.left, rect.top + offset), (rect.right, rect.top + offset))
+        self._draw_rounded_gradient_rect(rect, top, bottom, 14)
         pygame.draw.rect(self.screen, border, rect, 2, border_radius=14)
         surf = pygame.font.SysFont("georgia", 16, bold=True).render(text, True, text_color)
         self.screen.blit(surf, (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2 - 1))
+
+    def _draw_rounded_gradient_rect(self, rect, top, bottom, radius):
+        surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+        height = max(rect.height, 1)
+        for offset in range(height):
+            t = offset / height
+            color = tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3))
+            pygame.draw.line(surf, color, (0, offset), (rect.width, offset))
+
+        mask = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=radius)
+        surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        self.screen.blit(surf, rect.topleft)
 
     def _draw_how_to_play_notes(self, rect, tips, accent):
         pygame.draw.rect(self.screen, (7, 10, 18), rect.move(0, 6), border_radius=22)
@@ -1390,6 +1448,122 @@ class Game:
         self.screen.blit(name_surf, (rect.x + 8, rect.y + 32))
         self.screen.blit(tag_surf,  (rect.x + 8, rect.y + 50))
 
+    def _load_game_stats_rows(self):
+        try:
+            with open(CSV_PATH, newline="") as f:
+                return list(csv.DictReader(f))
+        except (OSError, csv.Error):
+            return []
+
+    def _get_stats_max_page(self):
+        rows = self._load_game_stats_rows()
+        if not rows:
+            return 0
+        return max(0, (len(rows) - 1) // self.stats_rows_per_page)
+
+    def _draw_statistics_screen(self):
+        self.screen.blit(self.home_backdrop, (0, 0))
+        self._draw_home_sparkles()
+        mouse_pos = self._get_mouse_pos()
+
+        rows = self._load_game_stats_rows()
+        max_page = self._get_stats_max_page()
+        self.stats_table_page = max(0, min(self.stats_table_page, max_page))
+
+        panel = pygame.Rect(34, 28, 732, 544)
+        pygame.draw.rect(self.screen, (4, 7, 14), panel.move(10, 14), border_radius=30)
+        pygame.draw.rect(self.screen, (15, 21, 36), panel, border_radius=30)
+        pygame.draw.rect(self.screen, (82, 101, 140), panel, 2, border_radius=30)
+        pygame.draw.rect(self.screen, (42, 54, 82), panel.inflate(-10, -10), 1, border_radius=25)
+
+        title = pygame.font.SysFont("georgia", 38, bold=True).render("Statistics", True, (248, 228, 160))
+        self.screen.blit(title, (panel.x + 30, panel.y + 22))
+
+        subtitle_text = f"data/game_stats.csv  |  {len(rows)} rows"
+        subtitle = pygame.font.SysFont("georgia", 13, bold=True).render(subtitle_text, True, (145, 157, 184))
+        self.screen.blit(subtitle, (panel.x + 34, panel.y + 68))
+
+        table = pygame.Rect(panel.x + 24, panel.y + 98, panel.width - 48, 360)
+        self._draw_stats_table(table, rows)
+
+        page_label = pygame.font.SysFont("georgia", 13, bold=True).render(
+            f"Page {self.stats_table_page + 1} / {max_page + 1}",
+            True,
+            (218, 201, 154),
+        )
+        self.screen.blit(page_label, (panel.centerx - page_label.get_width() // 2, panel.bottom - 82))
+
+        self.stats_back_btn = pygame.Rect(panel.x + 30, panel.bottom - 58, 150, 38)
+        self.stats_prev_btn = pygame.Rect(panel.centerx - 112, panel.bottom - 58, 104, 38)
+        self.stats_next_btn = pygame.Rect(panel.centerx + 8, panel.bottom - 58, 150, 38)
+
+        self._draw_help_nav_button(self.stats_back_btn, "Menu", mouse_pos, enabled=True)
+        self._draw_help_nav_button(self.stats_prev_btn, "Prev", mouse_pos, enabled=self.stats_table_page > 0)
+        self._draw_help_nav_button(
+            self.stats_next_btn,
+            "Next",
+            mouse_pos,
+            enabled=self.stats_table_page < max_page,
+            primary=True,
+        )
+
+        hint = pygame.font.SysFont("georgia", 12, bold=True).render(
+            "Left/Right or Space flips pages. ESC returns to menu.",
+            True,
+            (126, 138, 162),
+        )
+        self.screen.blit(hint, (panel.right - hint.get_width() - 32, panel.y + 72))
+
+    def _draw_stats_table(self, rect, rows):
+        pygame.draw.rect(self.screen, (7, 10, 18), rect.move(0, 6), border_radius=18)
+        pygame.draw.rect(self.screen, (21, 29, 48), rect, border_radius=18)
+        pygame.draw.rect(self.screen, (72, 88, 122), rect, 1, border_radius=18)
+
+        headers = [
+            ("player_name", "player_name", 150),
+            ("wave_number", "wave", 52),
+            ("enemies_defeated", "defeated", 92),
+            ("damage_dealt", "damage", 82),
+            ("gold_spent", "gold", 66),
+            ("castle_hp", "hp", 54),
+            ("survival_time", "time", 70),
+        ]
+        total_w = sum(width for _, _, width in headers)
+        start_x = rect.x + (rect.width - total_w) // 2
+        header_y = rect.y + 14
+        row_h = 18
+        header_font = pygame.font.SysFont("verdana", 10, bold=True)
+        row_font = pygame.font.SysFont("verdana", 10, bold=False)
+
+        pygame.draw.rect(self.screen, (34, 43, 64), (start_x - 8, header_y - 6, total_w + 16, 24), border_radius=10)
+        x = start_x
+        for _, label, width in headers:
+            surf = header_font.render(label, True, (248, 228, 160))
+            self.screen.blit(surf, (x + 4, header_y))
+            x += width
+
+        if not rows:
+            empty = pygame.font.SysFont("georgia", 18, bold=True).render("No stats recorded yet.", True, (166, 178, 202))
+            self.screen.blit(empty, (rect.centerx - empty.get_width() // 2, rect.centery - empty.get_height() // 2))
+            return
+
+        start = self.stats_table_page * self.stats_rows_per_page
+        visible_rows = rows[start:start + self.stats_rows_per_page]
+        for index, row in enumerate(visible_rows):
+            y = header_y + 30 + index * row_h
+            bg = (24, 32, 52) if index % 2 == 0 else (18, 25, 42)
+            pygame.draw.rect(self.screen, bg, (start_x - 8, y - 3, total_w + 16, row_h), border_radius=6)
+            x = start_x
+            for key, _, width in headers:
+                text = str(row.get(key, ""))
+                while row_font.size(text)[0] > width - 8 and len(text) > 1:
+                    text = text[:-1]
+                if text != str(row.get(key, "")):
+                    text = text[:-1] + "."
+                surf = row_font.render(text, True, (214, 222, 235))
+                self.screen.blit(surf, (x + 4, y))
+                x += width
+
     def _draw_name_input(self, rect):
         now = pygame.time.get_ticks()
         has_error = now < self.home_name_error_until and not self.player_name.strip()
@@ -1427,11 +1601,7 @@ class Game:
         shadow = rect.move(0, 8)
         pygame.draw.rect(self.screen, (10, 13, 22), shadow, border_radius=22)
 
-        height = max(rect.height, 1)
-        for offset in range(height):
-            t = offset / height
-            color = tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3))
-            pygame.draw.line(self.screen, color, (rect.left, rect.top + offset), (rect.right, rect.top + offset))
+        self._draw_rounded_gradient_rect(rect, top, bottom, 22)
 
         border = (255, 233, 168) if hover else (242, 214, 128)
         pygame.draw.rect(self.screen, border, rect, 3, border_radius=22)

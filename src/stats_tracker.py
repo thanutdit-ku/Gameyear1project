@@ -4,22 +4,13 @@ import pandas as pd
 from datetime import datetime
 
 CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "game_stats.csv")
-SUMMARY_CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "game_summary.csv")
-CSV_COLUMNS = ["session_id", "wave_number", "enemies_defeated",
+CSV_COLUMNS = ["player_name", "wave_number", "enemies_defeated",
                "damage_dealt", "gold_spent", "castle_hp", "survival_time"]
-SUMMARY_CSV_COLUMNS = [
-    "session_id",
-    "waves_played",
-    "total_damage_dealt",
-    "castle_hp_lost",
-    "enemies_encountered",
-    "result",
-]
 
 
 class StatsTracker:
-    def __init__(self):
-        self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    def __init__(self, player_name=None):
+        self.player_name = player_name or datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Per-wave accumulators (reset after each save)
         self.enemies_defeated = 0
@@ -29,9 +20,18 @@ class StatsTracker:
 
         # Session-level history (one dict per wave, used for generate_report)
         self.history = []
-        self.summary_saved = False
 
         self._ensure_csv_exists()
+
+    def set_player_name(self, player_name):
+        """Use the commander name as the session label shown in CSV output."""
+        clean_name = " ".join(str(player_name).strip().split())
+        if clean_name:
+            self.player_name = clean_name
+
+    def set_session_id(self, session_id):
+        """Backward-compatible alias for older game code."""
+        self.set_player_name(session_id)
 
     # ------------------------------------------------------------------
     # Recording methods (called during gameplay)
@@ -60,7 +60,7 @@ class StatsTracker:
     def save_to_csv(self, wave_number, castle_hp, survival_time):
         """Append one row for the completed wave, then reset wave accumulators."""
         row = {
-            "session_id": self.session_id,
+            "player_name": self.player_name,
             "wave_number": wave_number,
             "enemies_defeated": self.enemies_defeated,
             "damage_dealt": self.damage_dealt,
@@ -77,26 +77,6 @@ class StatsTracker:
 
         self._reset_wave()
 
-    def save_session_summary(self, waves_played, castle_hp_lost, result):
-        """Append one final summary row for the whole play session."""
-        if self.summary_saved:
-            return
-
-        row = {
-            "session_id": self.session_id,
-            "waves_played": waves_played,
-            "total_damage_dealt": sum(d["damage_dealt"] for d in self.history),
-            "castle_hp_lost": castle_hp_lost,
-            "enemies_encountered": self.enemies_encountered,
-            "result": result,
-        }
-
-        with open(SUMMARY_CSV_PATH, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=SUMMARY_CSV_COLUMNS)
-            writer.writerow(row)
-
-        self.summary_saved = True
-
     def _reset_wave(self):
         """Reset per-wave accumulators for the next wave."""
         self.enemies_defeated = 0
@@ -109,10 +89,6 @@ class StatsTracker:
         if not os.path.exists(CSV_PATH) or os.path.getsize(CSV_PATH) == 0:
             with open(CSV_PATH, "w", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
-                writer.writeheader()
-        if not os.path.exists(SUMMARY_CSV_PATH) or os.path.getsize(SUMMARY_CSV_PATH) == 0:
-            with open(SUMMARY_CSV_PATH, "w", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=SUMMARY_CSV_COLUMNS)
                 writer.writeheader()
 
     # ------------------------------------------------------------------
@@ -139,5 +115,5 @@ class StatsTracker:
             }
 
         report["total_waves"] = len(self.history)
-        report["session_id"] = self.session_id
+        report["player_name"] = self.player_name
         return report

@@ -97,6 +97,7 @@ Wave results are saved to:
 
 Tracked values include:
 
+- player name
 - enemies defeated
 - damage dealt
 - gold spent
