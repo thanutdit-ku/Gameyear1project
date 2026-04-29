@@ -179,6 +179,9 @@ class Game:
         # Projectiles in flight
         self.projectiles = []
 
+        # Death particles
+        self.particles = []
+
         # Floating damage numbers
         self.damage_numbers = []
 
@@ -573,6 +576,14 @@ class Game:
         if total_dmg > 0:
             self.stats_tracker.record_damage(int(total_dmg))
 
+        # Tick death particles
+        for p in self.particles:
+            p["x"] += p["vx"] * dt
+            p["y"] += p["vy"] * dt
+            p["vy"] += 120 * dt  # gravity
+            p["age"] += dt
+        self.particles = [p for p in self.particles if p["age"] < p["max_age"]]
+
         # Tick floating damage numbers
         for dn in self.damage_numbers:
             dn["age"] += dt
@@ -585,6 +596,7 @@ class Game:
             self.gold += enemy.reward_gold
             self.total_gold_earned += enemy.reward_gold
             self.stats_tracker.record_kill()
+            self._spawn_death_particles(enemy.position)
             self.enemies.remove(enemy)
             if getattr(enemy, "splits_on_death", False):
                 for offset in (-10, 10):
@@ -688,6 +700,7 @@ class Game:
             self._draw_start_wave_button()
             self._draw_wave_preview()
 
+        self._draw_particles()
         self._draw_damage_numbers()
 
         if self.state == self.STATE_VICTORY:
@@ -1227,6 +1240,41 @@ class Game:
             by = int(dn["y"])
             self.screen.blit(shadow, (bx + 1, by + 1))
             self.screen.blit(surf,   (bx,     by))
+
+    # Death particle colors by enemy type (fallback = red/orange)
+    _PARTICLE_COLORS = [
+        (255, 80,  40),
+        (255, 160,  30),
+        (255, 220,  60),
+        (200,  60,  20),
+    ]
+
+    def _spawn_death_particles(self, position):
+        import math
+        count = 10
+        for i in range(count):
+            angle  = (i / count) * math.tau + random.uniform(-0.3, 0.3)
+            speed  = random.uniform(40, 110)
+            color  = random.choice(self._PARTICLE_COLORS)
+            self.particles.append({
+                "x":       float(position.x),
+                "y":       float(position.y),
+                "vx":      math.cos(angle) * speed,
+                "vy":      math.sin(angle) * speed - 30,
+                "age":     0.0,
+                "max_age": random.uniform(0.25, 0.45),
+                "radius":  random.randint(2, 4),
+                "color":   color,
+            })
+
+    def _draw_particles(self):
+        for p in self.particles:
+            alpha = max(0.0, 1.0 - p["age"] / p["max_age"])
+            r = max(1, int(p["radius"] * alpha))
+            a = int(255 * alpha)
+            surf = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (*p["color"], a), (r + 1, r + 1), r)
+            self.screen.blit(surf, (int(p["x"]) - r - 1, int(p["y"]) - r - 1))
 
     def _draw_pause_button(self, mouse_pos):
         self.pause_btn = pygame.Rect(GAME_W + 24, SCREEN_H - 162, PANEL_WIDTH - 48, 32)
