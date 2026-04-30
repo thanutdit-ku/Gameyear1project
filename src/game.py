@@ -229,6 +229,7 @@ class Game:
         self.total_gold_earned = 0
         self.end_main_menu_btn = pygame.Rect(0, 0, 0, 0)
         self.end_quit_btn      = pygame.Rect(0, 0, 0, 0)
+        self.end_restart_btn   = pygame.Rect(0, 0, 0, 0)
 
     def _set_display_mode(self):
         if self.fullscreen:
@@ -522,7 +523,9 @@ class Game:
             return
 
         if self.state in (self.STATE_GAME_OVER, self.STATE_VICTORY):
-            if self.end_main_menu_btn.collidepoint(pos):
+            if self.end_restart_btn.collidepoint(pos):
+                self._restart_game()
+            elif self.end_main_menu_btn.collidepoint(pos):
                 self._reset_for_main_menu()
             elif self.end_quit_btn.collidepoint(pos):
                 pygame.quit()
@@ -2565,6 +2568,14 @@ class Game:
         self.home_name_input_active = True
         self.player_name        = ""
 
+    def _restart_game(self):
+        name = self.player_name
+        self._reset_for_main_menu()
+        self.player_name = name
+        self.stats_tracker.set_player_name(name)
+        self.state = self.STATE_PREP
+        self.home_name_input_active = False
+
     def _draw_end_button(self, rect, text, top_color, bottom_color, mouse_pos):
         if rect.collidepoint(mouse_pos):
             top_color = tuple(min(255, c + 22) for c in top_color)
@@ -2701,15 +2712,20 @@ class Game:
             self.screen.blit(lbl_s, (panel.x + 40, y))
             self.screen.blit(val_s, (panel.right - val_s.get_width() - 40, y))
 
-        btn_w, btn_h = 190, 48
-        btn_y = panel.bottom - 62
-        self.end_main_menu_btn = pygame.Rect(panel.centerx - btn_w - 10, btn_y, btn_w, btn_h)
-        self.end_quit_btn      = pygame.Rect(panel.centerx + 10,         btn_y, btn_w, btn_h)
+        btn_w, btn_h = 130, 44
+        btn_y = panel.bottom - 60
+        total_w = btn_w * 3 + 10 * 2
+        sx = panel.centerx - total_w // 2
+        self.end_restart_btn   = pygame.Rect(sx,                  btn_y, btn_w, btn_h)
+        self.end_main_menu_btn = pygame.Rect(sx + btn_w + 10,     btn_y, btn_w, btn_h)
+        self.end_quit_btn      = pygame.Rect(sx + (btn_w + 10)*2, btn_y, btn_w, btn_h)
         mouse_pos = self._get_mouse_pos()
+        self._draw_end_button(self.end_restart_btn,   "Play Again",
+                              (38, 120, 72), (25, 85, 50),  mouse_pos)
         self._draw_end_button(self.end_main_menu_btn, "Main Menu",
-                              (55, 80, 130), (38, 55, 92), mouse_pos)
-        self._draw_end_button(self.end_quit_btn, "Quit Game",
-                              (130, 45, 45), (92, 30, 35), mouse_pos)
+                              (55, 80, 130), (38, 55, 92),  mouse_pos)
+        self._draw_end_button(self.end_quit_btn,      "Quit Game",
+                              (130, 45, 45), (92, 30, 35),  mouse_pos)
 
     def _draw_pause_overlay(self):
         overlay = pygame.Surface((GAME_W, SCREEN_H), pygame.SRCALPHA)
