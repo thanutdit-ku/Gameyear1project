@@ -22,7 +22,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install pandas matplotlib pytest pytest-junit
+        run: pip install pandas matplotlib pytest
 
       - name: Run tests
         run: pytest tests/ -v --junitxml=test-results.xml
