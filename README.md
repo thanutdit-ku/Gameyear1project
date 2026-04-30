@@ -68,6 +68,29 @@ pip install -r requirements.txt
 python3 main.py
 ```
 
+## Running Tests
+
+The test suite covers `StatsTracker` and the game's statistics logic (`_player_stats`, `_to_number`). No display or Pygame window is required.
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Expected output:
+
+```
+Ran 45 tests in 0.010s
+
+OK
+```
+
+### Test files
+
+| File | What it tests |
+|------|--------------|
+| `tests/test_stats_tracker.py` | Recording kills/damage/gold, CSV writes, history, `generate_report` |
+| `tests/test_game_stats.py` | Player stat aggregation, efficiency calculation, edge cases |
+
 ## Project Structure
 
 ```text
@@ -83,6 +106,9 @@ Game_project_year1/
 │   ├── stats_tracker.py
 │   ├── ui_manager.py
 │   └── wave.py
+├── tests/
+│   ├── test_stats_tracker.py
+│   └── test_game_stats.py
 ├── main.py
 ├── requirements.txt
 ├── LICENSE
