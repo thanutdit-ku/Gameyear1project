@@ -72,16 +72,22 @@ python3 main.py
 
 The test suite covers `StatsTracker` and the game's statistics logic (`_player_stats`, `_to_number`). No display or Pygame window is required.
 
+Install pytest first:
+
 ```bash
-python -m unittest discover -s tests -v
+pip install pytest
+```
+
+Then run:
+
+```bash
+pytest tests/ -v
 ```
 
 Expected output:
 
 ```
-Ran 45 tests in 0.010s
-
-OK
+101 passed in 0.47s
 ```
 
 ### Test files
@@ -90,6 +96,8 @@ OK
 |------|--------------|
 | `tests/test_stats_tracker.py` | Recording kills/damage/gold, CSV writes, history, `generate_report` |
 | `tests/test_game_stats.py` | Player stat aggregation, efficiency calculation, edge cases |
+
+Tests also run automatically on every push and pull request via GitHub Actions.
 
 ## Project Structure
 

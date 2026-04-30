@@ -189,3 +189,173 @@ class TestPlayerStats(unittest.TestCase):
         rows = [self._row("Ivy", 1, 0, 0, 0, 77, 20)]
         p = self.game._player_stats(rows)[0]
         self.assertAlmostEqual(p["hp"], 77.0)
+
+    # --- _to_number extra cases ---
+
+    def test_whitespace_only_string_returns_zero(self):
+        self.assertEqual(self.game._to_number("   "), 0.0)
+
+    def test_scientific_notation_string(self):
+        self.assertAlmostEqual(self.game._to_number("1e3"), 1000.0)
+
+    def test_large_number_string(self):
+        self.assertAlmostEqual(self.game._to_number("999999"), 999999.0)
+
+    def test_integer_passthrough(self):
+        self.assertAlmostEqual(self.game._to_number(42), 42.0)
+
+    def test_string_with_two_dots_returns_zero(self):
+        self.assertEqual(self.game._to_number("1.2.3"), 0.0)
+
+    # --- _player_stats: waves list ---
+
+    def test_waves_list_contains_all_wave_numbers(self):
+        rows = [
+            self._row("Jack", 1, 5, 200, 100, 90, 30),
+            self._row("Jack", 3, 8, 300, 120, 70, 40),
+            self._row("Jack", 5, 3, 150, 80, 55, 25),
+        ]
+        p = self.game._player_stats(rows)[0]
+        self.assertIn(1.0, p["waves"])
+        self.assertIn(3.0, p["waves"])
+        self.assertIn(5.0, p["waves"])
+
+    def test_waves_list_length_matches_row_count(self):
+        rows = [self._row("Kate", i, 0, 0, 0, 80, 10) for i in range(1, 6)]
+        p = self.game._player_stats(rows)[0]
+        self.assertEqual(len(p["waves"]), 5)
+
+    # --- _player_stats: HP edge cases ---
+
+    def test_hp_average_includes_zero_hp(self):
+        rows = [
+            self._row("Leo", 1, 0, 0, 0, 100, 10),
+            self._row("Leo", 2, 0, 0, 0, 0, 10),
+        ]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["hp"], 50.0)
+
+    def test_hp_all_zero_averages_to_zero(self):
+        rows = [self._row("Mia", i, 0, 0, 0, 0, 10) for i in range(1, 4)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["hp"], 0.0)
+
+    def test_hp_all_100_averages_to_100(self):
+        rows = [self._row("Ned", i, 0, 0, 0, 100, 10) for i in range(1, 6)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["hp"], 100.0)
+
+    # --- _player_stats: zero stats ---
+
+    def test_kills_zero_across_all_waves(self):
+        rows = [self._row("Olivia", i, 0, 500, 100, 80, 30) for i in range(1, 4)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["kills"], 0.0)
+
+    def test_damage_zero_across_all_waves(self):
+        rows = [self._row("Pete", i, 5, 0, 100, 80, 30) for i in range(1, 4)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["damage"], 0.0)
+
+    def test_gold_zero_across_all_waves(self):
+        rows = [self._row("Quinn", i, 5, 300, 0, 80, 30) for i in range(1, 4)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["gold"], 0.0)
+
+    # --- _player_stats: 10-wave run ---
+
+    def test_player_with_ten_waves_kills_sum(self):
+        rows = [self._row("Rose", i, 10, 500, 100, 100 - i * 5, i * 10) for i in range(1, 11)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["kills"], 100)
+
+    def test_player_with_ten_waves_max_wave(self):
+        rows = [self._row("Sam", i, 5, 300, 100, 80, 30) for i in range(1, 11)]
+        p = self.game._player_stats(rows)[0]
+        self.assertEqual(p["wave"], 10)
+
+    def test_player_with_ten_waves_damage_sum(self):
+        rows = [self._row("Tina", i, 5, 200, 100, 80, 30) for i in range(1, 11)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["damage"], 2000)
+
+    # --- _player_stats: efficiency edge cases ---
+
+    def test_efficiency_equal_damage_and_gold(self):
+        rows = [self._row("Uma", 1, 5, 200, 200, 80, 30)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["efficiency"], 1.0)
+
+    def test_efficiency_precise_decimal(self):
+        rows = [self._row("Victor", 1, 5, 333, 100, 80, 30)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["efficiency"], 3.33, places=2)
+
+    def test_efficiency_large_damage_small_gold(self):
+        rows = [self._row("Wendy", 1, 5, 1_000_000, 100, 80, 30)]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["efficiency"], 10000.0)
+
+    # --- _player_stats: name edge cases ---
+
+    def test_none_player_name_defaults_to_dash(self):
+        rows = [{
+            "player_name": None,
+            "wave_number": "1", "enemies_defeated": "5",
+            "damage_dealt": "300", "gold_spent": "100",
+            "castle_hp": "80", "survival_time": "30",
+        }]
+        p = self.game._player_stats(rows)[0]
+        self.assertEqual(p["name"], "-")
+
+    def test_empty_string_player_name_defaults_to_dash(self):
+        rows = [{
+            "player_name": "",
+            "wave_number": "1", "enemies_defeated": "0",
+            "damage_dealt": "0", "gold_spent": "0",
+            "castle_hp": "100", "survival_time": "30",
+        }]
+        p = self.game._player_stats(rows)[0]
+        self.assertEqual(p["name"], "-")
+
+    # --- _player_stats: multiple players extended ---
+
+    def test_three_players_all_counted(self):
+        rows = [
+            self._row("A", 1, 5, 200, 100, 80, 30),
+            self._row("B", 1, 8, 400, 150, 70, 25),
+            self._row("C", 1, 3, 100, 80, 90, 20),
+        ]
+        result = self.game._player_stats(rows)
+        self.assertEqual(len(result), 3)
+
+    def test_five_players_all_counted(self):
+        rows = [self._row(name, 1, 5, 200, 100, 80, 30) for name in ["A", "B", "C", "D", "E"]]
+        result = self.game._player_stats(rows)
+        self.assertEqual(len(result), 5)
+
+    def test_result_count_matches_unique_player_names(self):
+        rows = (
+            [self._row("X", i, 5, 200, 100, 80, 30) for i in range(1, 4)] +
+            [self._row("Y", i, 3, 150, 80, 75, 20) for i in range(1, 3)]
+        )
+        result = self.game._player_stats(rows)
+        self.assertEqual(len(result), 2)
+
+    # --- _player_stats: time ---
+
+    def test_survival_time_is_summed(self):
+        rows = [
+            self._row("Zoe", 1, 0, 0, 0, 80, 30),
+            self._row("Zoe", 2, 0, 0, 0, 60, 45),
+            self._row("Zoe", 3, 0, 0, 0, 40, 55),
+        ]
+        p = self.game._player_stats(rows)[0]
+        self.assertAlmostEqual(p["time"], 130)
+
+    # --- _player_stats: wave 0 ---
+
+    def test_wave_zero_is_valid(self):
+        rows = [self._row("Aaron", 0, 0, 0, 0, 100, 10)]
+        p = self.game._player_stats(rows)[0]
+        self.assertEqual(p["wave"], 0)

@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -19,12 +22,15 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install pandas matplotlib
+        run: pip install pandas matplotlib pytest pytest-junit
 
       - name: Run tests
-        run: |
-          python -m unittest discover -s tests -v 2>&1 | tee test_output.txt
-          echo ""
-          echo "===== Test Summary ====="
-          grep -E "^Ran [0-9]+ test" test_output.txt
-          grep -E "^(OK|FAILED)" test_output.txt
+        run: pytest tests/ -v --junitxml=test-results.xml
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Tests
+          path: test-results.xml
+          reporter: java-junit
