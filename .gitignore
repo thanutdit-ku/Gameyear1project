@@ -2,9 +2,6 @@
 __pycache__/
 *.py[cod]
 
-# Generated gameplay data (accumulates per session)
-data/game_stats.csv
-
 # Project internal docs
 proposal.pdf
 CLAUDE.md

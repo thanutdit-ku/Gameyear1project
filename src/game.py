@@ -1693,12 +1693,12 @@ class Game:
         return list(players.values())
 
     def _draw_leaderboard_graph(self, rect, rows, title):
-        players = sorted(self._player_stats(rows), key=lambda p: (p["wave"], p["time"]), reverse=True)[:6]
-        values = [p["wave"] for p in players]
+        players = sorted(self._player_stats(rows), key=lambda p: (p["wave"], p["damage"]), reverse=True)[:6]
+        values = [p["damage"] for p in players]
         labels = [p["name"] for p in players]
-        headers = ["Name", "Wave", "Kills", "Damage", "Gold"]
+        headers = ["Name", "Wave", "Damage", "Kills", "Gold"]
         table_rows = [
-            [p["name"][:10], int(p["wave"]), int(p["kills"]), int(p["damage"]), int(p["gold"])]
+            [p["name"][:10], int(p["wave"]), int(p["damage"]), int(p["kills"]), int(p["gold"])]
             for p in players
         ]
         self._draw_named_bar_chart(
@@ -1707,8 +1707,7 @@ class Game:
             labels,
             values,
             (229, 183, 57),
-            suffix="w",
-            note="Highest wave reached. Ties use longer survival time.",
+            note="Ranked by wave reached, then total damage dealt.",
             extra_stats=(headers, table_rows),
         )
 
