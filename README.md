@@ -99,6 +99,22 @@ Expected output:
 
 Tests also run automatically on every push and pull request via GitHub Actions.
 
+## UML Class Diagram
+
+<p align="center">
+  <img src="UML.png" alt="UML Class Diagram" width="900"/>
+</p>
+
+**Class hierarchy overview:**
+
+| Group | Classes |
+|-------|---------|
+| Controller | `Game` |
+| Towers | `Tower` → `ArcherTower`, `MageTower`, `CannonTower` |
+| Projectiles | `Projectile` → `Arrow`, `MagicOrb`, `Cannonball` |
+| Enemies | `Enemy` → `Slime`, `MiniSlime`, `Goblin`, `Bat`, `SwordShield`, `Orc`, `Spider`, `DarkKnight`, `BossEnemy` |
+| Support | `Wave`, `StatsTracker`, `UIManager` |
+
 ## Project Structure
 
 ```text
