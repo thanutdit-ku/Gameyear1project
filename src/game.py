@@ -1696,6 +1696,11 @@ class Game:
         players = sorted(self._player_stats(rows), key=lambda p: (p["wave"], p["time"]), reverse=True)[:6]
         values = [p["wave"] for p in players]
         labels = [p["name"] for p in players]
+        headers = ["Name", "Wave", "Kills", "Damage", "Gold"]
+        table_rows = [
+            [p["name"][:10], int(p["wave"]), int(p["kills"]), int(p["damage"]), int(p["gold"])]
+            for p in players
+        ]
         self._draw_named_bar_chart(
             rect,
             "Leaderboard",
@@ -1704,12 +1709,18 @@ class Game:
             (229, 183, 57),
             suffix="w",
             note="Highest wave reached. Ties use longer survival time.",
+            extra_stats=(headers, table_rows),
         )
 
     def _draw_damage_efficiency_graph(self, rect, rows, title):
         players = sorted(self._player_stats(rows), key=lambda p: p["efficiency"], reverse=True)[:6]
         values = [p["efficiency"] for p in players]
         labels = [p["name"] for p in players]
+        headers = ["Name", "Efficiency", "Damage", "Gold", "Kills"]
+        table_rows = [
+            [p["name"][:10], f"{p['efficiency']:.1f}", int(p["damage"]), int(p["gold"]), int(p["kills"])]
+            for p in players
+        ]
         self._draw_named_bar_chart(
             rect,
             "Damage Efficiency",
@@ -1718,12 +1729,13 @@ class Game:
             (82, 190, 120),
             decimals=1,
             note="Damage dealt per gold spent. Higher means more efficient spending.",
+            extra_stats=(headers, table_rows),
         )
 
     def _draw_gold_wave_scatter_graph(self, rect, rows, title):
         players = self._player_stats(rows)
         self._draw_chart_frame(rect, "Gold Spent vs Wave Reached", (118, 190, 245), "Low gold + high wave means strong value.")
-        plot = pygame.Rect(rect.x + 56, rect.y + 74, rect.width - 94, rect.height - 120)
+        plot = pygame.Rect(rect.x + 56, rect.y + 74, rect.width - 94, rect.height - 200)
         self._draw_chart_grid(plot)
         max_gold = max([p["gold"] for p in players] + [1])
         max_wave = max([p["wave"] for p in players] + [1])
@@ -1739,6 +1751,14 @@ class Game:
                 lx = min(plot.right - label.get_width(), x + 8)
                 self.screen.blit(label, (lx, y - 6))
         self._draw_axis_labels(plot, "gold spent", "wave")
+        headers = ["Name", "Wave", "Gold", "Kills", "Value"]
+        table_rows = [
+            [p["name"][:10], int(p["wave"]), int(p["gold"]), int(p["kills"]),
+             "★ Good" if p["gold"] <= max_gold * 0.4 and p["wave"] >= max_wave * 0.6 else "-"]
+            for p in ranked[:6]
+        ]
+        table_rect = pygame.Rect(rect.x + 10, plot.bottom + 16, rect.width - 20, rect.bottom - plot.bottom - 20)
+        self._draw_stats_mini_table(table_rect, headers, table_rows, (118, 190, 245))
 
     def _draw_survival_curve_graph(self, rect, rows, title):
         by_wave = {}
@@ -1747,6 +1767,11 @@ class Game:
             by_wave.setdefault(wave, []).append(self._to_number(row.get("castle_hp")))
         waves = sorted(by_wave)
         values = [sum(by_wave[w]) / len(by_wave[w]) for w in waves]
+        headers = ["Wave", "Avg HP", "Min HP", "Max HP", "Players"]
+        table_rows = [
+            [f"W{w}", f"{sum(by_wave[w])/len(by_wave[w]):.0f}", f"{min(by_wave[w]):.0f}", f"{max(by_wave[w]):.0f}", len(by_wave[w])]
+            for w in waves
+        ]
         self._draw_line_chart(
             rect,
             "Survival Curve",
@@ -1754,6 +1779,7 @@ class Game:
             (235, 116, 120),
             max_value=100,
             note="Average castle HP after each wave. Sharp drops mark difficult waves.",
+            extra_stats=(headers, table_rows),
         )
 
     def _draw_wave_heatmap_graph(self, rect, rows, title):
@@ -1767,7 +1793,7 @@ class Game:
         waves = sorted(by_wave)
         total_players = max(len(players), 1)
         self._draw_chart_frame(rect, "Wave Survival Heatmap", (247, 136, 80), "Brighter cells mean more players reached that wave.")
-        grid = pygame.Rect(rect.x + 52, rect.y + 100, rect.width - 104, 130)
+        grid = pygame.Rect(rect.x + 52, rect.y + 100, rect.width - 104, 100)
         cell_w = max(42, min(72, grid.width // max(len(waves), 1)))
         font = pygame.font.SysFont("verdana", 10, bold=True)
         for index, wave in enumerate(waves):
@@ -1779,8 +1805,19 @@ class Game:
             pygame.draw.rect(self.screen, (20, 25, 36), cell, 1, border_radius=8)
             wave_surf = font.render(f"W{wave}", True, (248, 246, 238))
             count_surf = font.render(str(len(by_wave[wave])), True, (20, 25, 36))
-            self.screen.blit(wave_surf, (cell.centerx - wave_surf.get_width() // 2, cell.y + 12))
-            self.screen.blit(count_surf, (cell.centerx - count_surf.get_width() // 2, cell.centery - 5))
+            self.screen.blit(wave_surf, (cell.centerx - wave_surf.get_width() // 2, cell.y + 8))
+            self.screen.blit(count_surf, (cell.centerx - count_surf.get_width() // 2, cell.centery))
+        headers = ["Wave", "Players", "Reach %", "Drop from prev"]
+        prev_count = None
+        table_rows = []
+        for wave in waves:
+            count = len(by_wave[wave])
+            pct = f"{count / total_players * 100:.0f}%"
+            drop = "-" if prev_count is None else (f"-{prev_count - count}" if prev_count > count else "=")
+            table_rows.append([f"Wave {wave}", count, pct, drop])
+            prev_count = count
+        table_rect = pygame.Rect(rect.x + 10, grid.bottom + 14, rect.width - 20, rect.bottom - grid.bottom - 18)
+        self._draw_stats_mini_table(table_rect, headers, table_rows, (247, 136, 80))
 
     def _draw_performance_radar_graph(self, rect, rows, title):
         players = sorted(self._player_stats(rows), key=lambda p: (p["wave"], p["damage"]), reverse=True)[:3]
@@ -1821,11 +1858,41 @@ class Game:
             pygame.draw.polygon(self.screen, (*colors[p_index], 50), pts)
             pygame.draw.polygon(self.screen, colors[p_index], pts, 2)
             legend = font.render(player["name"], True, colors[p_index])
-            self.screen.blit(legend, (rect.x + 18, rect.y + 64 + p_index * 18))
+            self.screen.blit(legend, (rect.x + 14, rect.y + 64 + p_index * 52))
+            font_s = pygame.font.SysFont("verdana", 8)
+            stat_lines = [
+                f"W:{int(player['wave'])}  K:{int(player['kills'])}",
+                f"DMG:{int(player['damage'])}  HP:{player['hp']:.0f}",
+                f"Gold:{int(player['gold'])}  T:{player['time']:.0f}s",
+            ]
+            for li, line in enumerate(stat_lines):
+                s = font_s.render(line, True, (180, 190, 210))
+                self.screen.blit(s, (rect.x + 14, rect.y + 77 + p_index * 52 + li * 11))
 
-    def _draw_named_bar_chart(self, rect, title, labels, values, accent, suffix="", decimals=0, note=""):
+    def _draw_stats_mini_table(self, rect, headers, rows, accent):
+        font_h = pygame.font.SysFont("verdana", 9, bold=True)
+        font_d = pygame.font.SysFont("verdana", 9)
+        row_h = 15
+        col_w = rect.width // max(len(headers), 1)
+        pygame.draw.line(self.screen, (55, 68, 98), (rect.x, rect.y), (rect.right, rect.y), 1)
+        for ci, h in enumerate(headers):
+            surf = font_h.render(str(h), True, accent)
+            self.screen.blit(surf, (rect.x + ci * col_w + (col_w - surf.get_width()) // 2, rect.y + 3))
+        for ri, row in enumerate(rows):
+            y = rect.y + row_h + 2 + ri * row_h
+            if y + row_h > rect.bottom:
+                break
+            bg = (22, 30, 48) if ri % 2 == 0 else (17, 23, 38)
+            pygame.draw.rect(self.screen, bg, pygame.Rect(rect.x, y, rect.width, row_h - 1))
+            for ci, val in enumerate(row):
+                color = (248, 238, 210) if ci == 0 else (200, 210, 228)
+                surf = font_d.render(str(val), True, color)
+                self.screen.blit(surf, (rect.x + ci * col_w + (col_w - surf.get_width()) // 2, y + 2))
+
+    def _draw_named_bar_chart(self, rect, title, labels, values, accent, suffix="", decimals=0, note="", extra_stats=None):
         self._draw_chart_frame(rect, title, accent, note)
-        plot = pygame.Rect(rect.x + 56, rect.y + 78, rect.width - 96, rect.height - 130)
+        plot_h = rect.height - (200 if extra_stats else 130)
+        plot = pygame.Rect(rect.x + 56, rect.y + 78, rect.width - 96, plot_h)
         self._draw_chart_grid(plot)
         if not values:
             return
@@ -1845,6 +1912,10 @@ class Game:
             name_surf = font.render(label[:7], True, (214, 222, 235))
             self.screen.blit(name_surf, (bar.centerx - name_surf.get_width() // 2, plot.bottom + 8))
             x += bar_w + gap
+
+        if extra_stats:
+            table_rect = pygame.Rect(rect.x + 10, plot.bottom + 26, rect.width - 20, rect.bottom - plot.bottom - 30)
+            self._draw_stats_mini_table(table_rect, extra_stats[0], extra_stats[1], accent)
 
     def _draw_axis_labels(self, plot, x_label, y_label):
         font = pygame.font.SysFont("verdana", 9, bold=True)
@@ -1869,9 +1940,10 @@ class Game:
             self.screen.blit(note_surf, (rect.x + 12, rect.y + 32))
         pygame.draw.rect(self.screen, accent, (rect.x + 12, rect.y + 50, rect.width - 24, 3), border_radius=2)
 
-    def _draw_line_chart(self, rect, title, values, accent, max_value=None, note=""):
+    def _draw_line_chart(self, rect, title, values, accent, max_value=None, note="", extra_stats=None):
         self._draw_chart_frame(rect, title, accent, note)
-        plot = pygame.Rect(rect.x + 50, rect.y + 78, rect.width - 84, rect.height - 126)
+        plot_h = rect.height - (210 if extra_stats else 126)
+        plot = pygame.Rect(rect.x + 50, rect.y + 78, rect.width - 84, plot_h)
         self._draw_chart_grid(plot)
 
         if not values:
@@ -1892,6 +1964,10 @@ class Game:
             pygame.draw.circle(self.screen, accent, point, 3)
 
         self._draw_chart_value_labels(rect, values, accent)
+
+        if extra_stats:
+            table_rect = pygame.Rect(rect.x + 10, plot.bottom + 26, rect.width - 20, rect.bottom - plot.bottom - 30)
+            self._draw_stats_mini_table(table_rect, extra_stats[0], extra_stats[1], accent)
 
     def _draw_bar_chart(self, rect, title, values, accent):
         self._draw_chart_frame(rect, title, accent)
